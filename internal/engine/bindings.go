@@ -59,7 +59,6 @@ func defaultBindings() map[string]map[string]string {
 		},
 		"codex": {
 			"b":  string(core.CodexBack),
-			"x":  string(core.Escape),
 			"lb": string(core.CodexPreviousTask),
 			"rb": string(core.CodexNextTask),
 			"l3": string(core.CodexCommandMenu),

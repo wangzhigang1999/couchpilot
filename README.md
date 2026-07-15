@@ -35,14 +35,14 @@ Holding **Back + Start** for 1.5 seconds is still the emergency exit.
 | D-pad | Arrow keys |
 | A | Left click; hold while moving the left stick to drag or select |
 | B | Back (`Alt+Left`) |
-| X | Right click; supports right-button drag outside Codex |
+| X | Right click; supports right-button drag |
 | Y | Tap physical right Alt for voice input |
 | LT | Precision pointer speed |
 | RT | Boost pointer speed |
 | LT + M1 / RB | Next Windows window |
 | LT + M2 / LB | Previous Windows window |
 
-Codex keeps its task, command-menu, terminal, Back and Escape mappings. Chrome keeps its tab, address-bar and new-tab mappings. The LT window shortcuts take priority without changing a shoulder button pressed by itself.
+Codex keeps its task, command-menu, terminal and Back mappings. X remains right click in Codex so it cannot accidentally stop a response. Chrome keeps its tab, address-bar and new-tab mappings. The LT window shortcuts take priority without changing a shoulder button pressed by itself.
 
 For multiple windows, keep LT held, tap M1/RB or M2/LB repeatedly to move through the native window switcher, then release LT to select the highlighted window.
 
