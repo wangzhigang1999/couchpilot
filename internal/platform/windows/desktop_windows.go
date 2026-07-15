@@ -24,20 +24,27 @@ const (
 	mouseRightUp   = 0x0010
 	mouseWheel     = 0x0800
 
-	vkShift    = 0x10
-	vkControl  = 0x11
-	vkAlt      = 0x12
-	vkEscape   = 0x1B
-	vkLeft     = 0x25
-	vkUp       = 0x26
-	vkRight    = 0x27
-	vkDown     = 0x28
-	vkTab      = 0x09
-	vkLeftAlt  = 0xA4
-	vkRightAlt = 0xA5
-	vkOEM3     = 0xC0
-	vkOEM4     = 0xDB
-	vkOEM6     = 0xDD
+	vkShift              = 0x10
+	vkControl            = 0x11
+	vkAlt                = 0x12
+	vkEscape             = 0x1B
+	vkEnter              = 0x0D
+	vkPageUp             = 0x21
+	vkPageDown           = 0x22
+	vkLeft               = 0x25
+	vkUp                 = 0x26
+	vkRight              = 0x27
+	vkDown               = 0x28
+	vkTab                = 0x09
+	vkLeftAlt            = 0xA4
+	vkRightAlt           = 0xA5
+	vkOEM3               = 0xC0
+	vkOEM4               = 0xDB
+	vkOEM6               = 0xDD
+	vkMediaNextTrack     = 0xB0
+	vkMediaPreviousTrack = 0xB1
+	vkMediaPlayPause     = 0xB3
+	vkVolumeMute         = 0xAD
 
 	processQueryLimitedInformation = 0x1000
 )
@@ -84,15 +91,16 @@ var (
 
 type Desktop struct {
 	voiceVirtualKey uint16
+	appProfiles     []core.AppProfile
 	windowSwitching bool
 }
 
-func NewDesktop(voiceKey string) (*Desktop, error) {
+func NewDesktop(voiceKey string, appProfiles []core.AppProfile) (*Desktop, error) {
 	key, err := virtualKey(voiceKey)
 	if err != nil {
 		return nil, err
 	}
-	return &Desktop{voiceVirtualKey: key}, nil
+	return &Desktop{voiceVirtualKey: key, appProfiles: appProfiles}, nil
 }
 
 func (d *Desktop) MovePointer(dx, dy int) error {
@@ -138,6 +146,36 @@ func (d *Desktop) Perform(action core.Action) error {
 		return tapKey(vkLeft, 25*time.Millisecond)
 	case core.ArrowRight:
 		return tapKey(vkRight, 25*time.Millisecond)
+	case core.Enter:
+		return tapKey(vkEnter, 25*time.Millisecond)
+	case core.TabPrevious:
+		return tapHotkey(vkControl, vkShift, vkTab)
+	case core.TabNext:
+		return tapHotkey(vkControl, vkTab)
+	case core.TabNew:
+		return tapHotkey(vkControl, uint16('T'))
+	case core.FocusLocation:
+		return tapHotkey(vkControl, uint16('L'))
+	case core.Find:
+		return tapHotkey(vkControl, uint16('F'))
+	case core.NewDocument:
+		return tapHotkey(vkControl, uint16('N'))
+	case core.PageUp:
+		return tapKey(vkPageUp, 25*time.Millisecond)
+	case core.PageDown:
+		return tapKey(vkPageDown, 25*time.Millisecond)
+	case core.CommandPalette:
+		return tapHotkey(vkControl, vkShift, uint16('P'))
+	case core.QuickOpen:
+		return tapHotkey(vkControl, uint16('P'))
+	case core.MediaPreviousTrack:
+		return tapKey(vkMediaPreviousTrack, 25*time.Millisecond)
+	case core.MediaNextTrack:
+		return tapKey(vkMediaNextTrack, 25*time.Millisecond)
+	case core.MediaPlayPause:
+		return tapKey(vkMediaPlayPause, 25*time.Millisecond)
+	case core.VolumeMute:
+		return tapKey(vkVolumeMute, 25*time.Millisecond)
 	case core.VoiceTap:
 		if err := physicalKeyEvent(d.voiceVirtualKey, true); err != nil {
 			return err
@@ -219,13 +257,7 @@ func (d *Desktop) ForegroundProfile() string {
 	if err != nil {
 		return "default"
 	}
-	if isCodexProcessPath(path) {
-		return "codex"
-	}
-	if isChromeProcessPath(path) {
-		return "chrome"
-	}
-	return "default"
+	return matchProfile(path, d.appProfiles)
 }
 
 func (d *Desktop) click(right bool) error {
@@ -351,16 +383,38 @@ func foregroundProcessPath() (string, error) {
 	return winapi.UTF16ToString(buffer[:size]), nil
 }
 
-func isCodexProcessPath(path string) bool {
+func matchProfile(path string, profiles []core.AppProfile) string {
 	normalized := strings.ToLower(strings.ReplaceAll(path, "/", `\`))
-	return strings.HasSuffix(normalized, `\chatgpt.exe`) &&
-		(strings.Contains(normalized, `\openai.codex_`) || strings.Contains(normalized, `\codex\`))
+	processName := normalized
+	if index := strings.LastIndex(normalized, `\`); index >= 0 {
+		processName = normalized[index+1:]
+	}
+	for _, profile := range profiles {
+		if !matchesAny(processName, profile.ProcessNames, func(value, candidate string) bool {
+			return value == strings.ToLower(candidate)
+		}) {
+			continue
+		}
+		if !matchesAny(normalized, profile.PathContains, func(value, candidate string) bool {
+			return strings.Contains(value, strings.ToLower(strings.ReplaceAll(candidate, "/", `\`)))
+		}) {
+			continue
+		}
+		return profile.Name
+	}
+	return "default"
 }
 
-func isChromeProcessPath(path string) bool {
-	normalized := strings.ToLower(strings.ReplaceAll(path, "/", `\`))
-	return strings.HasSuffix(normalized, `\chrome.exe`) &&
-		(strings.Contains(normalized, `\google\chrome\`) || strings.Contains(normalized, `\chrome\application\`))
+func matchesAny(value string, candidates []string, match func(string, string) bool) bool {
+	if len(candidates) == 0 {
+		return true
+	}
+	for _, candidate := range candidates {
+		if match(value, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func callError(name string, err error) error {

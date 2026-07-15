@@ -96,8 +96,38 @@ func TestSingleChromeShoulderKeepsTabMapping(t *testing.T) {
 	if err := engine.Step(core.State{Buttons: core.RightShoulder}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if len(desktop.actions) != 1 || desktop.actions[0] != core.ChromeNextTab {
+	if len(desktop.actions) != 1 || desktop.actions[0] != core.TabNext {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+}
+
+func TestHighFrequencyAppBindings(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile string
+		button  core.Button
+		want    core.Action
+	}{
+		{"Raycast confirms selection", "raycast", core.A, core.Enter},
+		{"Raycast moves selection", "raycast", core.RightShoulder, core.ArrowDown},
+		{"Notes find", "notes", core.LeftThumb, core.Find},
+		{"VS Code command palette", "vscode", core.LeftThumb, core.CommandPalette},
+		{"Chat dismisses overlay", "chat", core.B, core.Escape},
+		{"Media toggles playback", "media", core.RightThumb, core.MediaPlayPause},
+		{"Documents page down", "document", core.RightShoulder, core.PageDown},
+		{"Terminal opens tab", "terminal", core.RightThumb, core.TabNew},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			desktop := &fakeDesktop{profile: test.profile}
+			engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+			if err := engine.Step(core.State{Buttons: test.button}, 1.0/120, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			if len(desktop.actions) != 1 || desktop.actions[0] != test.want {
+				t.Fatalf("unexpected actions: %v", desktop.actions)
+			}
+		})
 	}
 }
 

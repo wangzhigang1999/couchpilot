@@ -28,6 +28,7 @@ Usage:
   couchpilot stop [--config config.json]
   couchpilot status [--config config.json]
   couchpilot doctor [--config config.json]
+  couchpilot profile [--config config.json]
   couchpilot actions
 `
 
@@ -104,6 +105,8 @@ func execute(args []string) error {
 		return nil
 	case "doctor":
 		return doctor(options.configPath)
+	case "profile":
+		return showProfile(options.configPath)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", command, usage)
 	}
@@ -136,7 +139,7 @@ func run(options options) error {
 		return err
 	}
 	defer releasePID()
-	gamepad, desktop, err := platform.New(settings.VoiceKey)
+	gamepad, desktop, err := platform.New(settings.VoiceKey, settings.AppProfiles)
 	if err != nil {
 		return err
 	}
@@ -153,6 +156,19 @@ func run(options options) error {
 		return nil
 	}
 	return err
+}
+
+func showProfile(configPath string) error {
+	settings, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+	_, desktop, err := platform.New(settings.VoiceKey, settings.AppProfiles)
+	if err != nil {
+		return err
+	}
+	fmt.Println(desktop.ForegroundProfile())
+	return nil
 }
 
 func watchStopFile(ctx context.Context, path string, cancel context.CancelFunc) {
@@ -176,7 +192,7 @@ func doctor(configPath string) error {
 	if err != nil {
 		return err
 	}
-	gamepad, _, err := platform.New(settings.VoiceKey)
+	gamepad, _, err := platform.New(settings.VoiceKey, settings.AppProfiles)
 	if err != nil {
 		return err
 	}

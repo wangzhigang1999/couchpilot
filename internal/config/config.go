@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
 )
@@ -26,6 +27,7 @@ type Settings struct {
 	VoiceMode                string                       `json:"voice_mode"`
 	VoiceKey                 string                       `json:"voice_key,omitempty"`
 	ExitHoldSeconds          float64                      `json:"exit_hold_seconds"`
+	AppProfiles              []core.AppProfile            `json:"app_profiles"`
 	Bindings                 map[string]map[string]string `json:"bindings,omitempty"`
 }
 
@@ -43,6 +45,24 @@ func Default() Settings {
 		VoiceMode:                "tap",
 		VoiceKey:                 "right_alt",
 		ExitHoldSeconds:          1.5,
+		AppProfiles:              defaultAppProfiles(),
+	}
+}
+
+func defaultAppProfiles() []core.AppProfile {
+	return []core.AppProfile{
+		{Name: "codex", ProcessNames: []string{"ChatGPT.exe"}, PathContains: []string{`\OpenAI.Codex_`}},
+		{Name: "chrome", ProcessNames: []string{"chrome.exe", "msedge.exe", "firefox.exe"}},
+		{Name: "raycast", ProcessNames: []string{"Raycast.exe"}},
+		{Name: "typeless", ProcessNames: []string{"Typeless.exe"}},
+		{Name: "notes", ProcessNames: []string{"Typora.exe", "Obsidian.exe"}},
+		{Name: "vscode", ProcessNames: []string{"Code.exe"}},
+		{Name: "jetbrains", ProcessNames: []string{"pycharm64.exe", "idea64.exe", "goland64.exe"}},
+		{Name: "chat", ProcessNames: []string{"QQ.exe", "Weixin.exe", "WeChat.exe"}},
+		{Name: "assistant", ProcessNames: []string{"Claude.exe", "CherryStudio.exe", "Cherry Studio.exe"}},
+		{Name: "media", ProcessNames: []string{"QQMusic.exe", "Spotify.exe", "vlc.exe"}},
+		{Name: "document", ProcessNames: []string{"Acrobat.exe", "WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE"}},
+		{Name: "terminal", ProcessNames: []string{"WindowsTerminal.exe"}},
 	}
 }
 
@@ -102,6 +122,30 @@ func (s Settings) Validate() error {
 	}
 	if s.ExitHoldSeconds <= 0 {
 		return errors.New("exit_hold_seconds must be positive")
+	}
+	profileNames := make(map[string]struct{}, len(s.AppProfiles))
+	for index, profile := range s.AppProfiles {
+		if profile.Name == "" {
+			return fmt.Errorf("app_profiles[%d].name cannot be empty", index)
+		}
+		name := strings.ToLower(profile.Name)
+		if _, found := profileNames[name]; found {
+			return fmt.Errorf("duplicate app profile %q", profile.Name)
+		}
+		profileNames[name] = struct{}{}
+		if len(profile.ProcessNames) == 0 && len(profile.PathContains) == 0 {
+			return fmt.Errorf("app profile %q needs process_names or path_contains", profile.Name)
+		}
+		for _, processName := range profile.ProcessNames {
+			if strings.TrimSpace(processName) == "" {
+				return fmt.Errorf("app profile %q contains an empty process name", profile.Name)
+			}
+		}
+		for _, fragment := range profile.PathContains {
+			if strings.TrimSpace(fragment) == "" {
+				return fmt.Errorf("app profile %q contains an empty path fragment", profile.Name)
+			}
+		}
 	}
 	for profile, bindings := range s.Bindings {
 		if profile == "" {
