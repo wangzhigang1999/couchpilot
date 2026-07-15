@@ -126,6 +126,27 @@ func TestAHoldsLeftMouseUntilReleased(t *testing.T) {
 	}
 }
 
+func TestCodexXUsesRightMouseInsteadOfEscape(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	if err := engine.Step(core.State{Buttons: core.X}, 1.0/120, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Step(core.State{}, 1.0/120, now.Add(time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	want := []core.Action{core.MouseRightDown, core.MouseRightUp}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
 func TestDisconnectReleasesHeldMouseButton(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
 	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
