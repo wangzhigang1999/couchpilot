@@ -12,5 +12,19 @@
   "voice_mode": "tap",
   "voice_key": "right_alt",
   "exit_hold_seconds": 1.5,
+  "app_profiles": [
+    { "name": "codex", "process_names": ["ChatGPT.exe"], "path_contains": ["\\OpenAI.Codex_"] },
+    { "name": "chrome", "process_names": ["chrome.exe", "msedge.exe", "firefox.exe"] },
+    { "name": "raycast", "process_names": ["Raycast.exe"] },
+    { "name": "typeless", "process_names": ["Typeless.exe"] },
+    { "name": "notes", "process_names": ["Typora.exe", "Obsidian.exe"] },
+    { "name": "vscode", "process_names": ["Code.exe"] },
+    { "name": "jetbrains", "process_names": ["pycharm64.exe", "idea64.exe", "goland64.exe"] },
+    { "name": "chat", "process_names": ["QQ.exe", "Weixin.exe", "WeChat.exe"] },
+    { "name": "assistant", "process_names": ["Claude.exe", "CherryStudio.exe", "Cherry Studio.exe"] },
+    { "name": "media", "process_names": ["QQMusic.exe", "Spotify.exe", "vlc.exe"] },
+    { "name": "document", "process_names": ["Acrobat.exe", "WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE"] },
+    { "name": "terminal", "process_names": ["WindowsTerminal.exe"] }
+  ],
   "bindings": {}
 }

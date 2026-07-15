@@ -46,25 +46,51 @@ Holding **Back + Start** for 1.5 seconds is still the emergency exit.
 | LT + M1 / RB | Next Windows window |
 | LT + M2 / LB | Previous Windows window |
 
-Codex keeps its task, command-menu, terminal and Back mappings. X remains right click in Codex so it cannot accidentally stop a response. Chrome keeps its tab, address-bar and new-tab mappings. The LT window shortcuts take priority without changing a shoulder button pressed by itself.
+Codex keeps its task, command-menu, terminal and Back mappings. X remains right click in Codex so it cannot accidentally stop a response. Browsers keep tab, address-bar and new-tab mappings. The LT window shortcuts take priority without changing a shoulder button pressed by itself.
 
 For multiple windows, keep LT held, tap M1/RB or M2/LB repeatedly to move through the native window switcher, then release LT to select the highlighted window.
+
+### Built-in app profiles
+
+CouchPilot identifies the foreground executable and applies a small, safe profile. Mouse movement, scrolling, right-click, voice input, and LT window switching remain available everywhere.
+
+| Apps | LB / RB | L3 | R3 | Special |
+|---|---|---|---|---|
+| Codex | Previous / next task | Command menu | Terminal | B goes back; X stays right-click |
+| Chrome, Edge, Firefox | Previous / next tab | Address bar | New tab | B navigates back |
+| Raycast | Selection up / down | — | — | A confirms; B dismisses |
+| Typora, Obsidian | Previous / next tab | Find | New document | No automatic input focus |
+| VS Code | Previous / next tab | Command palette | Quick open | B dismisses |
+| PyCharm, IntelliJ, GoLand | — | Find | — | B dismisses |
+| QQ, WeChat | — | Find | — | B dismisses; A never auto-sends |
+| Claude, Cherry Studio | — | Find | — | B dismisses |
+| QQ Music, Spotify, VLC | Previous / next track | Mute | Play / pause | Uses Windows media keys |
+| Acrobat, Word, Excel, PowerPoint | Page up / down | Find | — | — |
+| Windows Terminal | Previous / next tab | Command palette | New tab | B dismisses |
+| Typeless | — | — | — | B dismisses; Y still uses right Alt |
 
 ## Configuration and future UI
 
 `config.json` is the stable configuration contract for the CLI and a future UI. A UI only needs to validate and edit this file; the engine remains unchanged.
 
-Bindings are optional overrides grouped by foreground-app profile:
+Bindings are optional overrides grouped by foreground-app profile. `app_profiles` controls which executable selects each profile; matching is case-insensitive, list items are alternatives, and `process_names` plus `path_contains` can disambiguate executables with the same name. Earlier rules win.
 
 ```json
 {
+  "app_profiles": [
+    {
+      "name": "notes",
+      "process_names": ["Typora.exe", "Obsidian.exe"]
+    }
+  ],
   "bindings": {
     "default": {
       "a": "click_left",
       "lt+rb": "window_next"
     },
-    "chrome": {
-      "rb": "chrome_next_tab"
+    "notes": {
+      "rb": "tab_next",
+      "l3": "find"
     }
   }
 }
@@ -76,7 +102,13 @@ Set an action to an empty string to disable that exact binding. Run the followin
 .\bin\couchpilot.exe actions
 ```
 
-The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord.
+The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. The supplied `config.json` contains the full editable profile list.
+
+To check which profile CouchPilot sees for the foreground app, focus that app and run:
+
+```powershell
+.\bin\couchpilot.exe profile
+```
 
 ## Architecture
 

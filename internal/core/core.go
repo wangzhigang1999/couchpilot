@@ -42,6 +42,16 @@ type Gamepad interface {
 	Rumble(DeviceID, uint16, uint16) error
 }
 
+// AppProfile describes how a foreground application maps to a binding profile.
+// Match fields are case-insensitive. Values within a field are ORed; populated
+// fields are ANDed, so process_names plus path_contains can disambiguate apps
+// that share an executable name.
+type AppProfile struct {
+	Name         string   `json:"name"`
+	ProcessNames []string `json:"process_names,omitempty"`
+	PathContains []string `json:"path_contains,omitempty"`
+}
+
 type Action string
 
 const (
@@ -57,6 +67,21 @@ const (
 	ArrowDown           Action = "arrow_down"
 	ArrowLeft           Action = "arrow_left"
 	ArrowRight          Action = "arrow_right"
+	Enter               Action = "enter"
+	TabPrevious         Action = "tab_previous"
+	TabNext             Action = "tab_next"
+	TabNew              Action = "tab_new"
+	FocusLocation       Action = "focus_location"
+	Find                Action = "find"
+	NewDocument         Action = "new_document"
+	PageUp              Action = "page_up"
+	PageDown            Action = "page_down"
+	CommandPalette      Action = "command_palette"
+	QuickOpen           Action = "quick_open"
+	MediaPreviousTrack  Action = "media_previous_track"
+	MediaNextTrack      Action = "media_next_track"
+	MediaPlayPause      Action = "media_play_pause"
+	VolumeMute          Action = "volume_mute"
 	Voice               Action = "voice"
 	VoiceTap            Action = "voice_tap"
 	VoiceDown           Action = "voice_down"
@@ -79,7 +104,10 @@ const (
 
 var KnownActions = []Action{
 	ClickLeft, ClickRight, NavigateBack, Escape,
-	ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
+	ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Enter,
+	TabPrevious, TabNext, TabNew, FocusLocation, Find, NewDocument,
+	PageUp, PageDown, CommandPalette, QuickOpen,
+	MediaPreviousTrack, MediaNextTrack, MediaPlayPause, VolumeMute,
 	Voice, WindowPrevious, WindowNext,
 	CodexBack, CodexPreviousTask, CodexNextTask, CodexCommandMenu, CodexTerminal,
 	ChromePreviousTab, ChromeNextTab, ChromeAddressBar, ChromeNewTab,

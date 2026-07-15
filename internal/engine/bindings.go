@@ -65,10 +65,62 @@ func defaultBindings() map[string]map[string]string {
 			"r3": string(core.CodexTerminal),
 		},
 		"chrome": {
-			"lb": string(core.ChromePreviousTab),
-			"rb": string(core.ChromeNextTab),
-			"l3": string(core.ChromeAddressBar),
-			"r3": string(core.ChromeNewTab),
+			"lb": string(core.TabPrevious),
+			"rb": string(core.TabNext),
+			"l3": string(core.FocusLocation),
+			"r3": string(core.TabNew),
+		},
+		"raycast": {
+			"a":  string(core.Enter),
+			"b":  string(core.Escape),
+			"lb": string(core.ArrowUp),
+			"rb": string(core.ArrowDown),
+		},
+		"typeless": {
+			"b": string(core.Escape),
+		},
+		"notes": {
+			"lb": string(core.TabPrevious),
+			"rb": string(core.TabNext),
+			"l3": string(core.Find),
+			"r3": string(core.NewDocument),
+		},
+		"vscode": {
+			"b":  string(core.Escape),
+			"lb": string(core.TabPrevious),
+			"rb": string(core.TabNext),
+			"l3": string(core.CommandPalette),
+			"r3": string(core.QuickOpen),
+		},
+		"jetbrains": {
+			"b":  string(core.Escape),
+			"l3": string(core.Find),
+		},
+		"chat": {
+			"b":  string(core.Escape),
+			"l3": string(core.Find),
+		},
+		"assistant": {
+			"b":  string(core.Escape),
+			"l3": string(core.Find),
+		},
+		"media": {
+			"lb": string(core.MediaPreviousTrack),
+			"rb": string(core.MediaNextTrack),
+			"l3": string(core.VolumeMute),
+			"r3": string(core.MediaPlayPause),
+		},
+		"document": {
+			"lb": string(core.PageUp),
+			"rb": string(core.PageDown),
+			"l3": string(core.Find),
+		},
+		"terminal": {
+			"b":  string(core.Escape),
+			"lb": string(core.TabPrevious),
+			"rb": string(core.TabNext),
+			"l3": string(core.CommandPalette),
+			"r3": string(core.TabNew),
 		},
 	}
 }
