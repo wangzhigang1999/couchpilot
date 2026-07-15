@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "device_id": "",
+  "controller_index": -1,
+  "poll_hz": 120,
+  "deadzone": 0.18,
+  "pointer_max_speed": 1450.0,
+  "pointer_curve": 1.7,
+  "precision_speed_multiplier": 0.28,
+  "boost_speed_multiplier": 1.85,
+  "scroll_units_per_second": 1100.0,
+  "voice_mode": "tap",
+  "voice_key": "right_alt",
+  "exit_hold_seconds": 1.5,
+  "bindings": {}
+}

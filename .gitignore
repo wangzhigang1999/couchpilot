@@ -1,0 +1,16 @@
+# Build output and local Go caches
+/bin/
+/.cache/
+*.exe
+
+# Runtime state
+/logs/
+*.pid
+*.stop
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
