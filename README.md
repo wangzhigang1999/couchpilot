@@ -1,7 +1,7 @@
 # CouchPilot
 
 <p align="center">
-  <img src="assets/couchpilot-banner.png" alt="CouchPilot — pilot your desktop from a gamepad" width="100%">
+  <img src="assets/couchpilot-banner-v2.png" alt="CouchPilot — pilot your desktop from a gamepad" width="100%">
 </p>
 
 [![CI](https://github.com/wangzhigang1999/couchpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/wangzhigang1999/couchpilot/actions/workflows/ci.yml)
