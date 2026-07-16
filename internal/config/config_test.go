@@ -66,3 +66,11 @@ func TestRejectsUnknownVoiceMode(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestRejectsOutOfRangeHapticStrength(t *testing.T) {
+	settings := Default()
+	settings.HapticStrength = 2.1
+	if settings.Validate() == nil {
+		t.Fatal("expected validation error")
+	}
+}

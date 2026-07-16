@@ -26,6 +26,8 @@ type Settings struct {
 	ScrollUnitsPerSecond     float64                      `json:"scroll_units_per_second"`
 	VoiceMode                string                       `json:"voice_mode"`
 	VoiceKey                 string                       `json:"voice_key,omitempty"`
+	HapticsEnabled           bool                         `json:"haptics_enabled"`
+	HapticStrength           float64                      `json:"haptic_strength"`
 	ExitHoldSeconds          float64                      `json:"exit_hold_seconds"`
 	AppProfiles              []core.AppProfile            `json:"app_profiles"`
 	Bindings                 map[string]map[string]string `json:"bindings,omitempty"`
@@ -44,6 +46,8 @@ func Default() Settings {
 		ScrollUnitsPerSecond:     1100,
 		VoiceMode:                "tap",
 		VoiceKey:                 "right_alt",
+		HapticsEnabled:           true,
+		HapticStrength:           1.0,
 		ExitHoldSeconds:          1.5,
 		AppProfiles:              defaultAppProfiles(),
 	}
@@ -119,6 +123,9 @@ func (s Settings) Validate() error {
 	}
 	if s.VoiceMode != "tap" && s.VoiceMode != "hold" && s.VoiceMode != "toggle_while_held" {
 		return errors.New("voice_mode must be tap, hold, or toggle_while_held")
+	}
+	if s.HapticStrength < 0 || s.HapticStrength > 2 {
+		return errors.New("haptic_strength must be between 0 and 2")
 	}
 	if s.ExitHoldSeconds <= 0 {
 		return errors.New("exit_hold_seconds must be positive")
