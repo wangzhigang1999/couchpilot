@@ -1,0 +1,57 @@
+---
+title: CouchPilot Field Guide
+description: 用游戏手柄顺滑控制 Windows 桌面。
+template: splash
+hero:
+  title: 拿起手柄，接管桌面。
+  tagline: CouchPilot 把游戏手柄变成快速、可配置的桌面控制器。这里收录所有全局键位、App 专属映射、震动反馈与安全规则。
+  image:
+    alt: CouchPilot 手柄标志
+    file: ../../assets/couchpilot-mark.svg
+  actions:
+    - text: 查看全局键位
+      link: /couchpilot/guide/controls/
+      icon: right-arrow
+    - text: 浏览 App 映射
+      link: /couchpilot/apps/
+      icon: open-book
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/wangzhigang1999/couchpilot
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<div className="stat-strip not-content">
+  <div><strong>12</strong><span>App profiles</span></div>
+  <div><strong>120 Hz</strong><span>Input polling</span></div>
+  <div><strong>0</strong><span>Runtime dependencies</span></div>
+</div>
+
+## 从这里开始
+
+<CardGrid>
+  <LinkCard title="全局键位" href="/couchpilot/guide/controls/" description="鼠标、滚动、语音输入和紧急退出。" />
+  <LinkCard title="多个窗口怎么切" href="/couchpilot/guide/window-switching/" description="按住 LT 浏览所有窗口，松开确认。" />
+  <LinkCard title="震动语言" href="/couchpilot/guide/haptics/" description="从轻触到强确认，反馈强度代表不同操作。" />
+  <LinkCard title="安全规则" href="/couchpilot/guide/safety/" description="不抢焦点、不误发消息、不停止 Codex。" />
+</CardGrid>
+
+## 高频应用
+
+<CardGrid>
+  <LinkCard title="Codex" href="/couchpilot/apps/codex/" description="任务切换、命令菜单、终端与安全右键。" />
+  <LinkCard title="浏览器" href="/couchpilot/apps/browsers/" description="Chrome、Edge、Firefox 标签页导航。" />
+  <LinkCard title="Raycast" href="/couchpilot/apps/raycast/" description="把启动器当成手柄菜单。" />
+  <LinkCard title="Typeless" href="/couchpilot/apps/typeless/" description="用 Y 触发右 Alt 语音输入。" />
+</CardGrid>
+
+## 设计原则
+
+<CardGrid>
+  <Card title="直接" icon="rocket">摇杆移动没有模式切换，拿起手柄就能控制。</Card>
+  <Card title="可预测" icon="seti">只覆盖文档中明确列出的按键，其余保持全局行为。</Card>
+  <Card title="安全" icon="shield-check">聊天不自动发送，应用切换不主动抢输入焦点。</Card>
+</CardGrid>

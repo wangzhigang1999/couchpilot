@@ -1,24 +1,37 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
-test("builds a GitHub Pages-ready static entry point", async () => {
+test("builds a GitHub Pages-ready Starlight site", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 
   assert.match(html, /CouchPilot Field Guide/);
-  assert.match(html, /\/couchpilot\/assets\/[^\"]+\.js/);
-  assert.match(html, /\/couchpilot\/assets\/[^\"]+\.css/);
+  assert.match(html, /拿起手柄，接管桌面/);
+  assert.match(html, /\/couchpilot\/_astro\//);
   assert.doesNotMatch(html, /chatgpt\.site|vinext|wrangler/i);
+  await access(new URL("../dist/pagefind/pagefind.js", import.meta.url));
 });
 
-test("ships the real mappings and safety rules", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+test("publishes one searchable page for every app profile", async () => {
+  const appsDirectory = new URL("../src/content/docs/apps/", import.meta.url);
+  const files = (await readdir(appsDirectory)).filter((file) => file !== "index.mdx" && /\.mdx?$/.test(file));
 
-  for (const app of ["Codex", "Raycast", "Typeless", "Typora", "Obsidian", "VS Code", "QQ", "微信", "QQ 音乐", "Windows Terminal"]) {
-    assert.match(page, new RegExp(app));
+  assert.equal(files.length, 12);
+  for (const slug of ["codex", "browsers", "raycast", "typeless", "notes", "vscode", "jetbrains", "chat", "assistants", "media", "documents", "terminal"]) {
+    const html = await readFile(new URL(`../dist/apps/${slug}/index.html`, import.meta.url), "utf8");
+    assert.match(html, /CouchPilot/);
   }
-  assert.match(page, /LT \+ RB/);
-  assert.match(page, /Back \+ Start/);
-  assert.match(page, /不会用 A 自动发消息/);
-  assert.match(page, /不会让 X 停止 Codex/);
+});
+
+test("keeps the hard-won safety rules", async () => {
+  const [codex, chat, safety] = await Promise.all([
+    readFile(new URL("../src/content/docs/apps/codex.md", import.meta.url), "utf8"),
+    readFile(new URL("../src/content/docs/apps/chat.md", import.meta.url), "utf8"),
+    readFile(new URL("../src/content/docs/guide/safety.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(codex, /X 永远保持右键/);
+  assert.match(chat, /A 不映射 Enter/);
+  assert.match(safety, /不会自动抢输入框/);
+  assert.match(safety, /Back \+ Start/);
 });

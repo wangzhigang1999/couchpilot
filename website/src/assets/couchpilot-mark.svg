@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 112" role="img" aria-labelledby="title">
+  <title id="title">CouchPilot gamepad mark</title>
+  <defs>
+    <linearGradient id="body" x1="18" y1="16" x2="142" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#19d4ff"/>
+      <stop offset="1" stop-color="#7857ff"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="40" y1="22" x2="115" y2="91" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#152b48"/>
+      <stop offset="1" stop-color="#091525"/>
+    </linearGradient>
+  </defs>
+  <path d="M44 25h72c13 0 23 8 27 20l12 37c5 16-13 29-26 18l-19-17H50l-19 17C18 111 0 98 5 82l12-37c4-12 14-20 27-20Z" fill="url(#glass)" stroke="url(#body)" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M43 49v24M31 61h24" stroke="#ecfbff" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="117" cy="50" r="6" fill="#18cff7"/>
+  <circle cx="132" cy="65" r="6" fill="#8b6cff"/>
+  <circle cx="101" cy="66" r="8" fill="#07111f" stroke="#80e8ff" stroke-width="4"/>
+  <circle cx="73" cy="66" r="8" fill="#07111f" stroke="#9b87ff" stroke-width="4"/>
+  <path d="M61 28 74 14h25l13 14" fill="none" stroke="url(#body)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

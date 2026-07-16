@@ -1,0 +1,37 @@
+---
+title: App 映射
+description: CouchPilot 内置的应用专属手柄配置。
+sidebar:
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+前台应用匹配到对应 profile 后，CouchPilot 只覆盖页面中列出的按键。鼠标移动、滚动、语音输入和窗口切换始终保留。
+
+## 高频
+
+<CardGrid>
+  <LinkCard title="Codex" href="/couchpilot/apps/codex/" description="任务、命令菜单和终端。" />
+  <LinkCard title="浏览器" href="/couchpilot/apps/browsers/" description="标签页、地址栏与新标签。" />
+  <LinkCard title="Raycast" href="/couchpilot/apps/raycast/" description="肩键选择，A 确认，B 返回。" />
+  <LinkCard title="Typeless" href="/couchpilot/apps/typeless/" description="右 Alt 语音输入。" />
+</CardGrid>
+
+## 创作与开发
+
+<CardGrid>
+  <LinkCard title="笔记与写作" href="/couchpilot/apps/notes/" description="Typora 与 Obsidian。" />
+  <LinkCard title="VS Code" href="/couchpilot/apps/vscode/" description="编辑器、命令面板和快速打开。" />
+  <LinkCard title="JetBrains IDE" href="/couchpilot/apps/jetbrains/" description="PyCharm、IntelliJ IDEA 与 GoLand。" />
+  <LinkCard title="Windows Terminal" href="/couchpilot/apps/terminal/" description="终端标签和命令面板。" />
+</CardGrid>
+
+## 沟通、媒体与文档
+
+<CardGrid>
+  <LinkCard title="聊天" href="/couchpilot/apps/chat/" description="QQ 与微信，避免误发消息。" />
+  <LinkCard title="AI 助手" href="/couchpilot/apps/assistants/" description="Claude 与 Cherry Studio。" />
+  <LinkCard title="音乐与视频" href="/couchpilot/apps/media/" description="QQ 音乐、Spotify 与 VLC。" />
+  <LinkCard title="文档与 PDF" href="/couchpilot/apps/documents/" description="Acrobat 与 Microsoft Office。" />
+</CardGrid>
