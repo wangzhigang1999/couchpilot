@@ -8,13 +8,20 @@ import (
 	"github.com/wangzhigang1999/couchpilot/internal/core"
 )
 
-type fakeGamepad struct{}
+type fakeGamepad struct {
+	rumbles *[][2]uint16
+}
 
 func (fakeGamepad) Devices() ([]core.DeviceID, error) { return []core.DeviceID{"test:0"}, nil }
 func (fakeGamepad) Read(core.DeviceID, float64) (core.State, bool, error) {
 	return core.State{}, true, nil
 }
-func (fakeGamepad) Rumble(core.DeviceID, uint16, uint16) error { return nil }
+func (f fakeGamepad) Rumble(_ core.DeviceID, left, right uint16) error {
+	if f.rumbles != nil {
+		*f.rumbles = append(*f.rumbles, [2]uint16{left, right})
+	}
+	return nil
+}
 
 type fakeDesktop struct {
 	profile string
@@ -211,5 +218,58 @@ func TestPrecisionAndBoostPointerSpeed(t *testing.T) {
 	}
 	if precision, normal, boost := distance(1, 0), distance(0, 0), distance(0, 1); !(precision < normal && normal < boost) {
 		t.Fatalf("expected precision < normal < boost, got %d %d %d", precision, normal, boost)
+	}
+}
+
+func TestButtonActionProducesPerceptibleHapticPulse(t *testing.T) {
+	var rumbles [][2]uint16
+	gamepad := fakeGamepad{rumbles: &rumbles}
+	controller := New(config.Default(), gamepad, &fakeDesktop{}, false, nil)
+	controller.device = "test:0"
+	now := time.Now()
+	if err := controller.Step(core.State{Buttons: core.A}, 1.0/120, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(rumbles) != 1 || rumbles[0][0] < 8000 || rumbles[0][1] < 20000 {
+		t.Fatalf("expected a perceptible click pulse, got %v", rumbles)
+	}
+	if err := controller.Step(core.State{}, 1.0/120, now.Add(200*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if got := rumbles[len(rumbles)-1]; got != [2]uint16{} {
+		t.Fatalf("expected motors to stop, got %v", rumbles)
+	}
+}
+
+func TestWindowCommitIsStrongerThanCycleTick(t *testing.T) {
+	var rumbles [][2]uint16
+	gamepad := fakeGamepad{rumbles: &rumbles}
+	controller := New(config.Default(), gamepad, &fakeDesktop{}, false, nil)
+	controller.device = "test:0"
+	now := time.Now()
+	if err := controller.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, now); err != nil {
+		t.Fatal(err)
+	}
+	cycle := rumbles[len(rumbles)-1]
+	if err := controller.Step(core.State{}, 1.0/120, now.Add(10*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	commit := rumbles[len(rumbles)-1]
+	if commit[0] <= cycle[0] || commit[1] <= cycle[1] {
+		t.Fatalf("expected commit %v to be stronger than cycle %v", commit, cycle)
+	}
+}
+
+func TestHapticsCanBeDisabled(t *testing.T) {
+	var rumbles [][2]uint16
+	settings := config.Default()
+	settings.HapticsEnabled = false
+	controller := New(settings, fakeGamepad{rumbles: &rumbles}, &fakeDesktop{}, false, nil)
+	controller.device = "test:0"
+	if err := controller.Step(core.State{Buttons: core.A}, 1.0/120, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if len(rumbles) != 0 {
+		t.Fatalf("expected no haptics, got %v", rumbles)
 	}
 }

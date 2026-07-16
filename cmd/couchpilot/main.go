@@ -214,10 +214,10 @@ func doctor(configPath string) error {
 	}
 	fmt.Printf("%s ready; packet=%d buttons=0x%04X LT=%.2f RT=%.2f\n",
 		device, state.PacketNumber, uint16(state.Buttons), state.LeftTrigger, state.RightTrigger)
-	if err := gamepad.Rumble(device, 7000, 7000); err != nil {
+	if err := gamepad.Rumble(device, 36000, 26000); err != nil {
 		return err
 	}
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(180 * time.Millisecond)
 	_ = gamepad.Rumble(device, 0, 0)
 	fmt.Println("vibration test sent")
 	return nil

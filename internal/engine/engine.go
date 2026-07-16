@@ -33,7 +33,10 @@ type Engine struct {
 	voiceHeld            core.Button
 	exitComboStarted     time.Time
 	rumbleUntil          time.Time
-	rumbleActive         bool
+	rumbleLeft           uint16
+	rumbleRight          uint16
+	rumbleSentLeft       uint16
+	rumbleSentRight      uint16
 	windowSwitching      bool
 	heldActions          map[core.Button]core.Action
 	scrollRemainder      float64
@@ -84,6 +87,8 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 			e.device = device
 			e.logger.Printf("using controller %s", device)
+			e.pulseHaptic(28000, 20000, 120*time.Millisecond)
+			e.updateRumble(frameStarted)
 		}
 		state, connected, err := e.gamepad.Read(e.device, e.settings.Deadzone)
 		if err != nil {
@@ -273,6 +278,7 @@ func (e *Engine) buttons(state core.State) error {
 				return fmt.Errorf("perform %s: %w", action, err)
 			}
 			e.heldActions[item.button] = up
+			e.actionHaptic(action)
 			continue
 		}
 		performedAction := action
@@ -292,9 +298,7 @@ func (e *Engine) buttons(state core.State) error {
 			}
 			return fmt.Errorf("perform %s: %w", action, err)
 		}
-		if profile != "default" || strings.HasPrefix(gesture, "lt+") || strings.HasPrefix(gesture, "rt+") {
-			e.rumbleUntil = e.clock.Now().Add(25 * time.Millisecond)
-		}
+		e.actionHaptic(performedAction)
 		if e.verbose {
 			e.logger.Printf("%s/%s -> %s", profile, gesture, action)
 		}
@@ -329,18 +333,21 @@ func (e *Engine) releaseAllHeldActions() {
 }
 
 func (e *Engine) voicePressed(button core.Button) error {
+	var err error
 	switch e.settings.VoiceMode {
 	case "tap":
-		return e.desktop.Perform(core.VoiceTap)
+		err = e.desktop.Perform(core.VoiceTap)
 	case "toggle_while_held":
 		e.voiceHeld |= button
-		return e.desktop.Perform(core.VoiceTap)
+		err = e.desktop.Perform(core.VoiceTap)
 	case "hold":
 		e.voiceHeld |= button
-		return e.desktop.Perform(core.VoiceDown)
-	default:
-		return nil
+		err = e.desktop.Perform(core.VoiceDown)
 	}
+	if err == nil {
+		e.actionHaptic(core.VoiceTap)
+	}
+	return err
 }
 
 func (e *Engine) voiceReleased() error {
@@ -358,7 +365,11 @@ func (e *Engine) finishWindowSwitch() error {
 		return nil
 	}
 	e.windowSwitching = false
-	return e.desktop.Perform(core.WindowCycleCommit)
+	if err := e.desktop.Perform(core.WindowCycleCommit); err != nil {
+		return err
+	}
+	e.actionHaptic(core.WindowCycleCommit)
+	return nil
 }
 
 func (e *Engine) logEdges(state core.State) {
@@ -375,16 +386,54 @@ func (e *Engine) logEdges(state core.State) {
 }
 
 func (e *Engine) updateRumble(now time.Time) {
-	active := now.Before(e.rumbleUntil)
-	if active == e.rumbleActive || e.device == "" {
+	if e.device == "" {
 		return
 	}
-	var amount uint16
-	if active {
-		amount = 9000
+	left, right := uint16(0), uint16(0)
+	if e.settings.HapticsEnabled && now.Before(e.rumbleUntil) {
+		left, right = e.rumbleLeft, e.rumbleRight
 	}
-	_ = e.gamepad.Rumble(e.device, amount, amount)
-	e.rumbleActive = active
+	if left == e.rumbleSentLeft && right == e.rumbleSentRight {
+		return
+	}
+	if err := e.gamepad.Rumble(e.device, left, right); err == nil {
+		e.rumbleSentLeft, e.rumbleSentRight = left, right
+	}
+}
+
+func (e *Engine) actionHaptic(action core.Action) {
+	switch action {
+	case core.ClickLeft, core.ClickRight:
+		e.pulseHaptic(9000, 22000, 45*time.Millisecond)
+	case core.ArrowUp, core.ArrowDown, core.ArrowLeft, core.ArrowRight,
+		core.TabPrevious, core.TabNext, core.PageUp, core.PageDown,
+		core.CodexPreviousTask, core.CodexNextTask,
+		core.ChromePreviousTab, core.ChromeNextTab:
+		e.pulseHaptic(12000, 26000, 60*time.Millisecond)
+	case core.WindowCyclePrevious, core.WindowCycleNext, core.WindowPrevious, core.WindowNext:
+		e.pulseHaptic(32000, 22000, 75*time.Millisecond)
+	case core.WindowCycleCommit:
+		e.pulseHaptic(42000, 32000, 110*time.Millisecond)
+	case core.VoiceTap:
+		e.pulseHaptic(26000, 30000, 90*time.Millisecond)
+	default:
+		e.pulseHaptic(20000, 24000, 70*time.Millisecond)
+	}
+}
+
+func (e *Engine) pulseHaptic(left, right uint16, duration time.Duration) {
+	if !e.settings.HapticsEnabled || e.settings.HapticStrength <= 0 {
+		return
+	}
+	scale := func(amount uint16) uint16 {
+		value := math.Round(float64(amount) * e.settings.HapticStrength)
+		if value > 65535 {
+			value = 65535
+		}
+		return uint16(value)
+	}
+	e.rumbleLeft, e.rumbleRight = scale(left), scale(right)
+	e.rumbleUntil = e.clock.Now().Add(duration)
 }
 
 func (e *Engine) disconnect() {
@@ -403,6 +452,9 @@ func (e *Engine) disconnect() {
 	e.voiceHeld = 0
 	e.previousLeftTrigger = false
 	e.previousRightTrigger = false
+	e.rumbleLeft, e.rumbleRight = 0, 0
+	e.rumbleSentLeft, e.rumbleSentRight = 0, 0
+	e.rumbleUntil = time.Time{}
 }
 
 func (e *Engine) shutdown() {
