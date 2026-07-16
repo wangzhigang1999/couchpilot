@@ -1,20 +1,20 @@
 ---
-title: 震动反馈
-description: CouchPilot 的四级震动语义与配置方式。
+title: Haptic feedback
+description: CouchPilot's four haptic levels and configuration options.
 sidebar:
   order: 3
 ---
 
-震动不是装饰，而是操作是否生效的低干扰确认。
+Haptics are low-distraction confirmation that an action really happened, not decoration.
 
-| 反馈 | 常见操作 | 感受 |
+| Feedback | Typical actions | Feel |
 | --- | --- | --- |
-| 轻触 | A / X 点击 | 很短的 tick |
-| 导航 | 方向、标签、菜单 | 清楚但克制的短脉冲 |
-| 确认 | 启动语音输入 | 更明显的一次确认 |
-| 强确认 | 窗口切换与落定 | 最强的一档反馈 |
+| Light tick | A / X click | A very short tick |
+| Navigation | Direction, tab, menu | A clear but restrained pulse |
+| Confirmation | Start voice input | A more noticeable confirmation |
+| Strong confirmation | Window switching and commit | The strongest feedback level |
 
-## 配置
+## Configuration
 
 ```json
 {
@@ -23,6 +23,6 @@ sidebar:
 }
 ```
 
-`haptic_strength` 的有效范围是 `0.0`–`2.0`。不想使用震动时，将 `haptics_enabled` 设为 `false`。
+`haptic_strength` accepts values from `0.0` to `2.0`. Set `haptics_enabled` to `false` to disable all vibration.
 
-运行 `couchpilot doctor` 时会触发一次明显震动，可用来确认当前连接的手柄是否支持反馈。
+Running `couchpilot doctor` sends one noticeable pulse so you can verify that the connected controller supports feedback.

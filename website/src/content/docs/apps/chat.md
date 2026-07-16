@@ -1,20 +1,20 @@
 ---
-title: 聊天
-description: QQ 与微信的安全导航映射。
+title: Chat
+description: Safe navigation mappings for QQ and WeChat.
 sidebar:
   order: 9
 ---
 
 <span class="process-chip">QQ.exe · Weixin.exe · WeChat.exe</span>
 
-查找和关闭浮层；发送行为刻意留给语音或鼠标确认。
+Find and close overlays from the gamepad. Sending remains an explicit voice or pointer action.
 
-| 按键 | 动作 | 键盘快捷键 |
+| Control | Action | Keyboard shortcut |
 | --- | --- | --- |
-| <kbd>B</kbd> | 关闭浮层 / 返回 | Escape |
-| <kbd>L3</kbd> | 查找 | Ctrl + F |
-| <kbd>A</kbd> | 鼠标左键 | 不会自动发送消息 |
+| <kbd>B</kbd> | Close overlay / back | Escape |
+| <kbd>L3</kbd> | Find | Ctrl + F |
+| <kbd>A</kbd> | Left mouse button | Never auto-sends a message |
 
-:::caution[避免误发]
-A 不映射 Enter。无论输入框是否聚焦，都不会因为按下 A 自动发送消息。
+:::caution[Prevent accidental sends]
+A is never mapped to Enter. Pressing A cannot send a message, even when the input field is focused.
 :::

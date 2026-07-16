@@ -7,7 +7,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "CouchPilot",
-      description: "用游戏手柄顺滑控制桌面：全局键位、App 专属映射、震动反馈与安全规则。",
+      description: "Control your desktop from a gamepad with fast, predictable, app-aware mappings.",
       logo: {
         src: "./src/assets/couchpilot-mark.svg",
         alt: "CouchPilot",
@@ -22,6 +22,10 @@ export default defineConfig({
       ],
       locales: {
         root: {
+          label: "English",
+          lang: "en",
+        },
+        "zh-cn": {
           label: "简体中文",
           lang: "zh-CN",
         },
@@ -32,7 +36,8 @@ export default defineConfig({
       },
       sidebar: [
         {
-          label: "开始使用",
+          label: "Getting started",
+          translations: { "zh-CN": "开始使用" },
           items: [
             { slug: "guide/controls" },
             { slug: "guide/window-switching" },
@@ -41,7 +46,8 @@ export default defineConfig({
           ],
         },
         {
-          label: "应用映射",
+          label: "App mappings",
+          translations: { "zh-CN": "应用映射" },
           items: [{ autogenerate: { directory: "apps" } }],
         },
       ],

@@ -1,17 +1,17 @@
 ---
-title: 音乐与视频
-description: QQ 音乐、Spotify 与 VLC 的全局媒体控制。
+title: Music and video
+description: Global media control for QQ Music, Spotify, and VLC.
 sidebar:
   order: 11
 ---
 
 <span class="process-chip">QQMusic.exe · Spotify.exe · vlc.exe</span>
 
-使用 Windows 全局媒体键，播放器不在前台时通常也能生效。
+These mappings use Windows global media keys, so they often work while the player is in the background.
 
-| 按键 | 动作 | 媒体键 |
+| Control | Action | Media key |
 | --- | --- | --- |
-| <kbd>LB</kbd> | 上一首 | Media Previous |
-| <kbd>RB</kbd> | 下一首 | Media Next |
-| <kbd>L3</kbd> | 静音 / 取消静音 | Volume Mute |
-| <kbd>R3</kbd> | 播放 / 暂停 | Media Play/Pause |
+| <kbd>LB</kbd> | Previous track | Media Previous |
+| <kbd>RB</kbd> | Next track | Media Next |
+| <kbd>L3</kbd> | Mute / unmute | Volume Mute |
+| <kbd>R3</kbd> | Play / pause | Media Play/Pause |
