@@ -66,3 +66,17 @@ test("keeps the safety and voice-edit whitelist rules in both languages", async 
   assert.match(chineseSafety, /不会自动抢输入框/);
   assert.match(chineseSafety, /A 只在明确的语音编辑状态发送/);
 });
+
+test("keeps the homepage mobile-first and free of the old blue gradient theme", async () => {
+  const [css, mark, favicon] = await Promise.all([
+    readFile(new URL("../src/styles/custom.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/assets/couchpilot-mark.svg", import.meta.url), "utf8"),
+    readFile(new URL("../public/favicon.svg", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(css, /--cp-accent:\s*#e4572e/i);
+  assert.match(css, /@media \(max-width: 38rem\)/);
+  assert.match(css, /\.cp-button\s*\{[^}]*width:\s*100%/s);
+  assert.match(css, /overflow-x:\s*hidden/);
+  assert.doesNotMatch(`${css}\n${mark}\n${favicon}`, /cyan|violet|linearGradient|radial-gradient|linear-gradient|backdrop-filter|blur\(/i);
+});
