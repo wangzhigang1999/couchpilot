@@ -28,6 +28,7 @@ const (
 	vkControl            = 0x11
 	vkAlt                = 0x12
 	vkEscape             = 0x1B
+	vkBackspace          = 0x08
 	vkEnter              = 0x0D
 	vkPageUp             = 0x21
 	vkPageDown           = 0x22
@@ -146,6 +147,8 @@ func (d *Desktop) Perform(action core.Action) error {
 		return tapKey(vkLeft, 25*time.Millisecond)
 	case core.ArrowRight:
 		return tapKey(vkRight, 25*time.Millisecond)
+	case core.Backspace:
+		return tapKey(vkBackspace, 25*time.Millisecond)
 	case core.Enter:
 		return tapKey(vkEnter, 25*time.Millisecond)
 	case core.TabPrevious:

@@ -11,9 +11,11 @@ These constraints came from real usage failures, so CouchPilot treats them as pr
 
 Switching apps or moving the pointer does not make CouchPilot focus a text field automatically.
 
-## A never auto-sends chat messages
+## A sends only in an explicit voice-edit state
 
-In QQ, WeChat, and other chat apps, <kbd>A</kbd> stays the left mouse button. It is never mapped to Enter.
+<kbd>A</kbd> stays the left mouse button during normal use. After <kbd>Y</kbd> starts voice input in a whitelisted app, CouchPilot temporarily maps <kbd>A</kbd> to Enter so you can send deliberately. Moving the pointer, changing apps, sending, or reaching the configured timeout restores the normal mouse binding.
+
+Browser pages, documents, terminals, and every app outside the whitelist never enter this state.
 
 ## X never stops Codex
 

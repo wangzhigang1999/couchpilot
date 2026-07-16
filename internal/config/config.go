@@ -14,42 +14,44 @@ import (
 const SchemaVersion = 1
 
 type Settings struct {
-	SchemaVersion            int                          `json:"schema_version"`
-	DeviceID                 string                       `json:"device_id,omitempty"`
-	ControllerIndex          int                          `json:"controller_index"`
-	PollHz                   int                          `json:"poll_hz"`
-	Deadzone                 float64                      `json:"deadzone"`
-	PointerMaxSpeed          float64                      `json:"pointer_max_speed"`
-	PointerCurve             float64                      `json:"pointer_curve"`
-	PrecisionSpeedMultiplier float64                      `json:"precision_speed_multiplier"`
-	BoostSpeedMultiplier     float64                      `json:"boost_speed_multiplier"`
-	ScrollUnitsPerSecond     float64                      `json:"scroll_units_per_second"`
-	VoiceMode                string                       `json:"voice_mode"`
-	VoiceKey                 string                       `json:"voice_key,omitempty"`
-	HapticsEnabled           bool                         `json:"haptics_enabled"`
-	HapticStrength           float64                      `json:"haptic_strength"`
-	ExitHoldSeconds          float64                      `json:"exit_hold_seconds"`
-	AppProfiles              []core.AppProfile            `json:"app_profiles"`
-	Bindings                 map[string]map[string]string `json:"bindings,omitempty"`
+	SchemaVersion             int                          `json:"schema_version"`
+	DeviceID                  string                       `json:"device_id,omitempty"`
+	ControllerIndex           int                          `json:"controller_index"`
+	PollHz                    int                          `json:"poll_hz"`
+	Deadzone                  float64                      `json:"deadzone"`
+	PointerMaxSpeed           float64                      `json:"pointer_max_speed"`
+	PointerCurve              float64                      `json:"pointer_curve"`
+	PrecisionSpeedMultiplier  float64                      `json:"precision_speed_multiplier"`
+	BoostSpeedMultiplier      float64                      `json:"boost_speed_multiplier"`
+	ScrollUnitsPerSecond      float64                      `json:"scroll_units_per_second"`
+	VoiceMode                 string                       `json:"voice_mode"`
+	VoiceKey                  string                       `json:"voice_key,omitempty"`
+	VoiceSubmitTimeoutSeconds float64                      `json:"voice_submit_timeout_seconds"`
+	HapticsEnabled            bool                         `json:"haptics_enabled"`
+	HapticStrength            float64                      `json:"haptic_strength"`
+	ExitHoldSeconds           float64                      `json:"exit_hold_seconds"`
+	AppProfiles               []core.AppProfile            `json:"app_profiles"`
+	Bindings                  map[string]map[string]string `json:"bindings,omitempty"`
 }
 
 func Default() Settings {
 	return Settings{
-		SchemaVersion:            SchemaVersion,
-		ControllerIndex:          -1,
-		PollHz:                   120,
-		Deadzone:                 0.18,
-		PointerMaxSpeed:          1450,
-		PointerCurve:             1.7,
-		PrecisionSpeedMultiplier: 0.28,
-		BoostSpeedMultiplier:     1.85,
-		ScrollUnitsPerSecond:     1100,
-		VoiceMode:                "tap",
-		VoiceKey:                 "right_alt",
-		HapticsEnabled:           true,
-		HapticStrength:           1.0,
-		ExitHoldSeconds:          1.5,
-		AppProfiles:              defaultAppProfiles(),
+		SchemaVersion:             SchemaVersion,
+		ControllerIndex:           -1,
+		PollHz:                    120,
+		Deadzone:                  0.18,
+		PointerMaxSpeed:           1450,
+		PointerCurve:              1.7,
+		PrecisionSpeedMultiplier:  0.28,
+		BoostSpeedMultiplier:      1.85,
+		ScrollUnitsPerSecond:      1100,
+		VoiceMode:                 "tap",
+		VoiceKey:                  "right_alt",
+		VoiceSubmitTimeoutSeconds: 120,
+		HapticsEnabled:            true,
+		HapticStrength:            1.0,
+		ExitHoldSeconds:           1.5,
+		AppProfiles:               defaultAppProfiles(),
 	}
 }
 
@@ -123,6 +125,9 @@ func (s Settings) Validate() error {
 	}
 	if s.VoiceMode != "tap" && s.VoiceMode != "hold" && s.VoiceMode != "toggle_while_held" {
 		return errors.New("voice_mode must be tap, hold, or toggle_while_held")
+	}
+	if s.VoiceSubmitTimeoutSeconds < 5 || s.VoiceSubmitTimeoutSeconds > 600 {
+		return errors.New("voice_submit_timeout_seconds must be between 5 and 600")
 	}
 	if s.HapticStrength < 0 || s.HapticStrength > 2 {
 		return errors.New("haptic_strength must be between 0 and 2")

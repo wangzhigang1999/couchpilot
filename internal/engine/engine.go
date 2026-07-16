@@ -17,6 +17,11 @@ import (
 
 var ErrExitRequested = errors.New("emergency exit requested")
 
+const (
+	composeDeleteRepeatDelay    = 320 * time.Millisecond
+	composeDeleteRepeatInterval = 75 * time.Millisecond
+)
+
 type Engine struct {
 	settings config.Settings
 	gamepad  core.Gamepad
@@ -38,6 +43,11 @@ type Engine struct {
 	rumbleSentLeft       uint16
 	rumbleSentRight      uint16
 	windowSwitching      bool
+	composeProfile       string
+	composeUntil         time.Time
+	repeatButton         core.Button
+	repeatAction         core.Action
+	repeatNext           time.Time
 	heldActions          map[core.Button]core.Action
 	scrollRemainder      float64
 	moveRemainder        [2]float64
@@ -111,6 +121,7 @@ func (e *Engine) Run(ctx context.Context) error {
 }
 
 func (e *Engine) Step(state core.State, dt float64, now time.Time) error {
+	e.expireCompose(now)
 	leftTriggerWasActive := e.previousLeftTrigger
 	e.logEdges(state)
 	if leftTriggerWasActive && state.LeftTrigger <= 0.08 && e.windowSwitching {
@@ -134,7 +145,10 @@ func (e *Engine) Step(state core.State, dt float64, now time.Time) error {
 	if err := e.scroll(state, dt); err != nil {
 		return err
 	}
-	if err := e.buttons(state); err != nil {
+	if err := e.buttons(state, now); err != nil {
+		return err
+	}
+	if err := e.repeatHeldAction(state, now); err != nil {
 		return err
 	}
 	e.updateRumble(now)
@@ -195,6 +209,7 @@ func (e *Engine) movePointer(state core.State, dt float64) error {
 	if dx == 0 && dy == 0 {
 		return nil
 	}
+	e.clearCompose("pointer movement")
 	return e.desktop.MovePointer(dx, dy)
 }
 
@@ -224,13 +239,14 @@ var gestures = []struct {
 	{core.A, "a"}, {core.B, "b"}, {core.X, "x"}, {core.Y, "y"},
 }
 
-func (e *Engine) buttons(state core.State) error {
+func (e *Engine) buttons(state core.State, now time.Time) error {
 	pressed := core.Button(uint16(state.Buttons) &^ uint16(e.previousButtons))
 	released := core.Button(uint16(e.previousButtons) &^ uint16(state.Buttons))
 	for _, item := range gestures {
 		if released&item.button == 0 {
 			continue
 		}
+		e.stopRepeat(item.button)
 		if err := e.releaseHeldAction(item.button); err != nil {
 			return err
 		}
@@ -254,11 +270,25 @@ func (e *Engine) buttons(state core.State) error {
 			continue
 		}
 		gesture := item.gesture
-		if state.LeftTrigger > 0.08 {
+		composeActive := e.composeActive(profile, now)
+		noTrigger := state.LeftTrigger <= 0.08 && state.RightTrigger <= 0.08
+		composeSubmit := false
+		composeDelete := false
+		if composeActive && noTrigger && gesture == "a" {
+			gesture = "voice+a"
+			composeSubmit = true
+			e.clearCompose("submitted")
+		} else if composeActive && gesture == "b" {
+			gesture = "voice+b"
+			composeDelete = true
+		} else if composeActive && gesture != "y" {
+			e.clearCompose("another control was used")
+		}
+		if !composeSubmit && state.LeftTrigger > 0.08 {
 			if _, found := e.resolver.Resolve(profile, "lt+"+gesture); found {
 				gesture = "lt+" + gesture
 			}
-		} else if state.RightTrigger > 0.08 {
+		} else if !composeSubmit && state.RightTrigger > 0.08 {
 			if _, found := e.resolver.Resolve(profile, "rt+"+gesture); found {
 				gesture = "rt+" + gesture
 			}
@@ -267,10 +297,22 @@ func (e *Engine) buttons(state core.State) error {
 		if !found {
 			continue
 		}
+		if composeDelete {
+			if err := e.desktop.Perform(action); err != nil {
+				return fmt.Errorf("perform %s: %w", action, err)
+			}
+			e.startRepeat(item.button, action, now)
+			e.actionHaptic(action)
+			if e.verbose {
+				e.logger.Printf("%s/%s -> %s", profile, gesture, action)
+			}
+			return nil
+		}
 		if action == core.Voice {
 			if err := e.voicePressed(item.button); err != nil {
 				return err
 			}
+			e.armCompose(profile, now)
 			continue
 		}
 		if down, up, held := heldActionPair(action); held {
@@ -302,7 +344,81 @@ func (e *Engine) buttons(state core.State) error {
 		if e.verbose {
 			e.logger.Printf("%s/%s -> %s", profile, gesture, action)
 		}
+		if composeSubmit {
+			return nil
+		}
 	}
+	return nil
+}
+
+func (e *Engine) armCompose(profile string, now time.Time) {
+	if _, found := e.resolver.Resolve(profile, "voice+a"); !found {
+		e.clearCompose("")
+		return
+	}
+	e.composeProfile = profile
+	e.composeUntil = now.Add(time.Duration(e.settings.VoiceSubmitTimeoutSeconds * float64(time.Second)))
+	if e.verbose {
+		e.logger.Printf("%s voice compose armed; A submits, B deletes", profile)
+	}
+}
+
+func (e *Engine) composeActive(profile string, now time.Time) bool {
+	if e.composeProfile == "" {
+		return false
+	}
+	if profile != e.composeProfile || !now.Before(e.composeUntil) {
+		e.clearCompose("profile changed or timeout elapsed")
+		return false
+	}
+	return true
+}
+
+func (e *Engine) expireCompose(now time.Time) {
+	if e.composeProfile != "" && !now.Before(e.composeUntil) {
+		e.clearCompose("timeout elapsed")
+	}
+}
+
+func (e *Engine) clearCompose(reason string) {
+	if e.composeProfile == "" {
+		return
+	}
+	if e.verbose && reason != "" {
+		e.logger.Printf("%s voice compose cleared: %s", e.composeProfile, reason)
+	}
+	e.composeProfile = ""
+	e.composeUntil = time.Time{}
+	e.stopRepeat(0)
+}
+
+func (e *Engine) startRepeat(button core.Button, action core.Action, now time.Time) {
+	e.repeatButton = button
+	e.repeatAction = action
+	e.repeatNext = now.Add(composeDeleteRepeatDelay)
+}
+
+func (e *Engine) stopRepeat(button core.Button) {
+	if button != 0 && e.repeatButton != button {
+		return
+	}
+	e.repeatButton = 0
+	e.repeatAction = ""
+	e.repeatNext = time.Time{}
+}
+
+func (e *Engine) repeatHeldAction(state core.State, now time.Time) error {
+	if e.repeatButton == 0 || state.Buttons&e.repeatButton == 0 || now.Before(e.repeatNext) {
+		return nil
+	}
+	if e.desktop.ForegroundProfile() != e.composeProfile {
+		e.clearCompose("profile changed while deleting")
+		return nil
+	}
+	if err := e.desktop.Perform(e.repeatAction); err != nil {
+		return fmt.Errorf("repeat %s: %w", e.repeatAction, err)
+	}
+	e.repeatNext = now.Add(composeDeleteRepeatInterval)
 	return nil
 }
 
@@ -438,6 +554,7 @@ func (e *Engine) pulseHaptic(left, right uint16, duration time.Duration) {
 
 func (e *Engine) disconnect() {
 	e.releaseAllHeldActions()
+	e.clearCompose("controller disconnected")
 	if e.windowSwitching {
 		_ = e.finishWindowSwitch()
 	}

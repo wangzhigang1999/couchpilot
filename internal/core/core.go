@@ -67,6 +67,7 @@ const (
 	ArrowDown           Action = "arrow_down"
 	ArrowLeft           Action = "arrow_left"
 	ArrowRight          Action = "arrow_right"
+	Backspace           Action = "backspace"
 	Enter               Action = "enter"
 	TabPrevious         Action = "tab_previous"
 	TabNext             Action = "tab_next"
@@ -104,7 +105,7 @@ const (
 
 var KnownActions = []Action{
 	ClickLeft, ClickRight, NavigateBack, Escape,
-	ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Enter,
+	ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Backspace, Enter,
 	TabPrevious, TabNext, TabNew, FocusLocation, Find, NewDocument,
 	PageUp, PageDown, CommandPalette, QuickOpen,
 	MediaPreviousTrack, MediaNextTrack, MediaPlayPause, VolumeMute,

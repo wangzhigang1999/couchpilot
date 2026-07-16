@@ -67,6 +67,14 @@ func TestRejectsUnknownVoiceMode(t *testing.T) {
 	}
 }
 
+func TestRejectsOutOfRangeVoiceSubmitTimeout(t *testing.T) {
+	settings := Default()
+	settings.VoiceSubmitTimeoutSeconds = 4
+	if settings.Validate() == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
 func TestRejectsOutOfRangeHapticStrength(t *testing.T) {
 	settings := Default()
 	settings.HapticStrength = 2.1

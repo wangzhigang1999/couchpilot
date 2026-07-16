@@ -184,6 +184,225 @@ func TestCodexXUsesRightMouseInsteadOfEscape(t *testing.T) {
 	}
 }
 
+func TestCodexVoiceThenASubmitsWithoutClicking(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []core.State{
+		{Buttons: core.Y},
+		{},
+		{Buttons: core.A},
+		{},
+	}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.Enter}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
+func TestCodexBDeletesAndKeepsVoiceSubmitArmed(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []core.State{
+		{Buttons: core.Y},
+		{},
+		{Buttons: core.B},
+		{},
+		{Buttons: core.A},
+		{},
+	}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.Backspace, core.Enter}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
+func TestHoldingCodexBRepeatsBackspaceUntilReleased(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []struct {
+		state core.State
+		at    time.Time
+	}{
+		{core.State{Buttons: core.Y}, now},
+		{core.State{}, now.Add(time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(2 * time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(300 * time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(330 * time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(410 * time.Millisecond)},
+		{core.State{}, now.Add(500 * time.Millisecond)},
+	}
+	for _, item := range states {
+		if err := controller.Step(item.state, 1.0/120, item.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.Backspace, core.Backspace, core.Backspace}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
+func TestCodexBOutsideVoiceComposeStillNavigatesBack(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	if err := controller.Step(core.State{Buttons: core.B}, 1.0/120, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if len(desktop.actions) != 1 || desktop.actions[0] != core.CodexBack {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+}
+
+func TestPointerMovementCancelsCodexVoiceSubmit(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []core.State{
+		{Buttons: core.Y},
+		{},
+		{LeftX: 1},
+		{Buttons: core.A},
+		{},
+	}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
+func TestCodexRTAAlwaysSubmits(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	if err := controller.Step(core.State{Buttons: core.A, RightTrigger: 1}, 1.0/120, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if len(desktop.actions) != 1 || desktop.actions[0] != core.Enter {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+}
+
+func TestVoiceEditWhitelistExcludesBrowser(t *testing.T) {
+	desktop := &fakeDesktop{profile: "chrome"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []core.State{{Buttons: core.Y}, {}, {Buttons: core.A}, {}}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
+func TestVoiceEditWhitelistIncludesChatAndAssistants(t *testing.T) {
+	for _, profile := range []string{"chat", "assistant"} {
+		t.Run(profile, func(t *testing.T) {
+			desktop := &fakeDesktop{profile: profile}
+			controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+			now := time.Now()
+			states := []core.State{
+				{Buttons: core.Y},
+				{},
+				{Buttons: core.B},
+				{},
+				{Buttons: core.A},
+				{},
+			}
+			for index, state := range states {
+				if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want := []core.Action{core.VoiceTap, core.Backspace, core.Enter}
+			if len(desktop.actions) != len(want) {
+				t.Fatalf("unexpected actions: %v", desktop.actions)
+			}
+			for index := range want {
+				if desktop.actions[index] != want[index] {
+					t.Fatalf("unexpected actions: %v", desktop.actions)
+				}
+			}
+		})
+	}
+}
+
+func TestCodexVoiceSubmitTimesOut(t *testing.T) {
+	settings := config.Default()
+	settings.VoiceSubmitTimeoutSeconds = 5
+	desktop := &fakeDesktop{profile: "codex"}
+	controller := New(settings, fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []struct {
+		state core.State
+		at    time.Time
+	}{
+		{core.State{Buttons: core.Y}, now},
+		{core.State{}, now.Add(time.Millisecond)},
+		{core.State{Buttons: core.A}, now.Add(6 * time.Second)},
+		{core.State{}, now.Add(6*time.Second + time.Millisecond)},
+	}
+	for _, item := range states {
+		if err := controller.Step(item.state, 1.0/120, item.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	if len(desktop.actions) != len(want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+	for index := range want {
+		if desktop.actions[index] != want[index] {
+			t.Fatalf("unexpected actions: %v", desktop.actions)
+		}
+	}
+}
+
 func TestDisconnectReleasesHeldMouseButton(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
 	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
