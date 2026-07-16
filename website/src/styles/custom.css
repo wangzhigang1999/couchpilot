@@ -1,0 +1,106 @@
+:root {
+  --sl-color-accent-low: #d8f5ff;
+  --sl-color-accent: #007ea8;
+  --sl-color-accent-high: #00374c;
+  --sl-font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --sl-content-width: 52rem;
+}
+
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #06364c;
+  --sl-color-accent: #2bd4ff;
+  --sl-color-accent-high: #d5f7ff;
+  --sl-color-bg: #07111f;
+  --sl-color-bg-nav: rgba(7, 17, 31, 0.86);
+  --sl-color-bg-sidebar: #091525;
+}
+
+header.header {
+  backdrop-filter: blur(18px);
+}
+
+.site-title img {
+  width: 2.5rem;
+  height: 2rem;
+}
+
+.hero {
+  padding-block: clamp(3rem, 9vw, 7rem);
+}
+
+.hero h1 {
+  letter-spacing: -0.045em;
+  max-width: none;
+  font-size: clamp(3rem, 5vw, 4rem);
+}
+
+.hero .tagline {
+  max-width: 42rem;
+  font-size: clamp(1rem, 2vw, 1.25rem);
+}
+
+.hero img {
+  filter: drop-shadow(0 24px 42px rgba(31, 203, 255, 0.22));
+}
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 2.5rem 0 3.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 1rem;
+  background: var(--sl-color-gray-5);
+}
+
+.stat-strip > div {
+  padding: 1.25rem;
+  background: var(--sl-color-bg-nav);
+}
+
+.stat-strip strong {
+  display: block;
+  color: var(--sl-color-accent-high);
+  font-size: 1.65rem;
+}
+
+.stat-strip span {
+  color: var(--sl-color-gray-2);
+  font-size: 0.85rem;
+}
+
+.sl-link-card,
+.card {
+  border-radius: 1rem;
+}
+
+.mapping-table kbd,
+.sl-markdown-content kbd {
+  display: inline-flex;
+  min-width: 2.2rem;
+  justify-content: center;
+  padding: 0.18rem 0.48rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-bottom-width: 3px;
+  border-radius: 0.45rem;
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-accent-high);
+  font: 700 0.78rem/1.4 var(--sl-font-mono);
+}
+
+.process-chip {
+  display: inline-flex;
+  margin: 0.25rem 0 1.25rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px;
+  color: var(--sl-color-gray-2);
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 38rem) {
+  .stat-strip { grid-template-columns: 1fr; }
+  .hero { text-align: left; }
+}

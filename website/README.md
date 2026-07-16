@@ -1,6 +1,6 @@
 # CouchPilot Field Guide
 
-Searchable documentation for CouchPilot's global gamepad controls, per-app mappings, haptic feedback, and safety rules.
+Searchable Starlight documentation for CouchPilot's global gamepad controls, per-app mappings, haptic feedback, and safety rules.
 
 ## Development
 
@@ -15,4 +15,4 @@ npm run dev
 npm test
 ```
 
-The site is a static React + Vite app published by GitHub Pages whenever changes land on `main`.
+Each app profile lives in `src/content/docs/apps` as a standalone Markdown page. Astro builds the site as static files and GitHub Pages publishes it whenever changes land on `main`.
