@@ -15,4 +15,4 @@ npm run dev
 npm test
 ```
 
-The site is built with React, vinext, and the OpenAI Sites hosting adapter.
+The site is a static React + Vite app published by GitHub Pages whenever changes land on `main`.

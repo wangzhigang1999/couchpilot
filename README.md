@@ -7,7 +7,7 @@
 [![CI](https://github.com/wangzhigang1999/couchpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/wangzhigang1999/couchpilot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**[Open the searchable CouchPilot Field Guide →](https://couchpilot-guide.iamzhigangwang.chatgpt.site)**
+**[Open the searchable CouchPilot Field Guide →](https://wangzhigang1999.github.io/couchpilot/)**
 
 **Pilot your desktop from a gamepad. Fast, configurable, and cross-platform by design.**
 
