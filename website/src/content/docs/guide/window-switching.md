@@ -1,18 +1,18 @@
 ---
-title: 多窗口切换
-description: 使用 LT 与肩键浏览并选择任意 Windows 窗口。
+title: Multi-window switching
+description: Browse and select any Windows window with LT and the shoulder buttons.
 sidebar:
   order: 2
 ---
 
-## 不只是在两个窗口之间切换
+## More than the two most recent windows
 
-1. 一直按住 <kbd>LT</kbd>，打开 Windows 原生窗口切换器。
-2. 反复轻点 <kbd>RB</kbd> 向前浏览，或轻点 <kbd>LB</kbd> 向后浏览。
-3. 找到目标窗口后松开 <kbd>LT</kbd>，此时才真正确认。
+1. Keep holding <kbd>LT</kbd> to open the native Windows task switcher.
+2. Tap <kbd>RB</kbd> repeatedly to move forward, or <kbd>LB</kbd> to move backward.
+3. Release <kbd>LT</kbd> only after the target window is highlighted.
 
-这套行为保留了 Windows 原生的 Alt + Tab 会话，所以无论打开两个还是十个窗口，都可以连续浏览，而不会在最近两个窗口之间来回跳。
+CouchPilot keeps the native Alt + Tab session open, so you can browse two windows or ten without bouncing between only the most recent pair.
 
-:::note[北通阿修罗 M1 / M2]
-如果 M1、M2 在硬件层与 RB、LB 重合，它们会触发同样的窗口切换动作。CouchPilot 无法在 XInput 层区分硬件输出完全相同的按键。
+:::note[BETOP Asura M1 / M2]
+If the controller firmware reports M1 and M2 as the same XInput buttons as RB and LB, they trigger the same window-switching actions. CouchPilot cannot distinguish buttons that produce identical XInput output.
 :::

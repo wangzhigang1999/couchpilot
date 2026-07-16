@@ -1,15 +1,15 @@
 ---
-title: AI 助手
-description: Claude 与 Cherry Studio 的安全基础映射。
+title: AI assistants
+description: Safe baseline mappings for Claude and Cherry Studio.
 sidebar:
   order: 10
 ---
 
 <span class="process-chip">Claude.exe · CherryStudio.exe</span>
 
-保留通用鼠标和语音，只增加查找与安全退出。
+Keep the global pointer and voice controls, adding only find and safe dismissal.
 
-| 按键 | 动作 | 键盘快捷键 |
+| Control | Action | Keyboard shortcut |
 | --- | --- | --- |
-| <kbd>B</kbd> | 关闭浮层 / 返回 | Escape |
-| <kbd>L3</kbd> | 查找 | Ctrl + F |
+| <kbd>B</kbd> | Close overlay / back | Escape |
+| <kbd>L3</kbd> | Find | Ctrl + F |

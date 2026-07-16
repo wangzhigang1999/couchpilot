@@ -1,30 +1,30 @@
 ---
-title: 全局键位
-description: 在所有应用中都可用的 CouchPilot 默认控制。
+title: Global controls
+description: CouchPilot controls available in every application.
 sidebar:
   order: 1
 ---
 
-这些操作在所有 App 中都可用。App 专属映射只覆盖对应页面明确列出的按键。
+These controls work in every app. An app profile overrides only the controls explicitly listed on that app's page.
 
-| 手柄控制 | 默认动作 | 说明 |
+| Gamepad control | Default action | Notes |
 | --- | --- | --- |
-| <kbd>左摇杆</kbd> | 移动鼠标 | 直接、连续移动 |
-| <kbd>右摇杆</kbd> | 滚动页面 | 上下滚动 |
-| <kbd>A</kbd> | 鼠标左键 | 按住可拖拽、框选 |
-| <kbd>X</kbd> | 鼠标右键 | 按住可右键拖拽 |
-| <kbd>Y</kbd> | 语音输入 | 轻击物理右 Alt |
-| <kbd>十字键</kbd> | 方向键 | ↑ ↓ ← → |
-| <kbd>LT</kbd> | 精准移动 | 降低鼠标速度 |
-| <kbd>RT</kbd> | 快速移动 | 提高鼠标速度 |
-| <kbd>LT + LB</kbd> | 上一个窗口 | Alt + Shift + Tab |
-| <kbd>LT + RB</kbd> | 下一个窗口 | Alt + Tab |
-| <kbd>Back + Start</kbd> | 紧急退出 | 按住 1.5 秒 |
+| <kbd>Left stick</kbd> | Move pointer | Immediate, continuous movement |
+| <kbd>Right stick</kbd> | Scroll | Vertical scrolling |
+| <kbd>A</kbd> | Left mouse button | Hold to drag or select |
+| <kbd>X</kbd> | Right mouse button | Hold for right-button drag |
+| <kbd>Y</kbd> | Voice input | Taps physical right Alt |
+| <kbd>D-pad</kbd> | Arrow keys | Up, down, left, right |
+| <kbd>LT</kbd> | Precision movement | Reduces pointer speed |
+| <kbd>RT</kbd> | Boost movement | Increases pointer speed |
+| <kbd>LT + LB</kbd> | Previous window | Alt + Shift + Tab |
+| <kbd>LT + RB</kbd> | Next window | Alt + Tab |
+| <kbd>Back + Start</kbd> | Emergency exit | Hold for 1.5 seconds |
 
-:::tip[按住才能拖拽]
-按住 A，再移动左摇杆，就像一直按住鼠标左键一样，可以框选文字、拖动窗口或选择一片区域。
+:::tip[Hold to drag]
+Hold A while moving the left stick. CouchPilot keeps the left mouse button down, so you can select text, move windows, or marquee-select a region.
 :::
 
-## App 专属映射如何覆盖
+## How app profiles override controls
 
-前台应用匹配到 profile 后，仅替换该 profile 声明的按键。例如浏览器中的 <kbd>RB</kbd> 会切换到下一个标签页，但摇杆移动、滚动、右键和语音输入仍然保持全局行为。
+When CouchPilot matches the foreground app to a profile, it replaces only the bindings declared by that profile. For example, RB moves to the next tab in a browser, while pointer movement, scrolling, right click, voice input, and window switching remain global.

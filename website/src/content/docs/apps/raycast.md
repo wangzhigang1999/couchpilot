@@ -1,18 +1,18 @@
 ---
 title: Raycast
-description: 用手柄操作 Raycast for Windows 的结果列表。
+description: Navigate Raycast for Windows results with a gamepad.
 sidebar:
   order: 4
-  badge: 高频
+  badge: Frequent
 ---
 
 <span class="process-chip">Raycast.exe</span>
 
-把启动器当成游戏菜单：肩键选择，A 确认，B 退出。
+Treat the launcher like a game menu: shoulders select, A confirms, and B exits.
 
-| 按键 | 动作 | 键盘快捷键 |
+| Control | Action | Keyboard shortcut |
 | --- | --- | --- |
-| <kbd>A</kbd> | 确认当前项目 | Enter |
-| <kbd>B</kbd> | 关闭 / 返回 | Escape |
-| <kbd>LB</kbd> | 向上选择 | Up |
-| <kbd>RB</kbd> | 向下选择 | Down |
+| <kbd>A</kbd> | Confirm current item | Enter |
+| <kbd>B</kbd> | Close / back | Escape |
+| <kbd>LB</kbd> | Move selection up | Up |
+| <kbd>RB</kbd> | Move selection down | Down |
