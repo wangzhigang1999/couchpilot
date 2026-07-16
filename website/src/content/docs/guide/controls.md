@@ -25,6 +25,12 @@ These controls work in every app. An app profile overrides only the controls exp
 Hold A while moving the left stick. CouchPilot keeps the left mouse button down, so you can select text, move windows, or marquee-select a region.
 :::
 
+## Voice editing in whitelisted apps
+
+Codex, QQ/WeChat, Claude, and Cherry Studio add a temporary voice-edit state. Press <kbd>Y</kbd> to dictate, tap or hold <kbd>B</kbd> to delete characters, then press <kbd>A</kbd> to send. Moving the pointer cancels the state and restores the normal A/B bindings immediately.
+
+See each app page for the exact behavior and safety limits. Browser pages, documents, and terminals do not enable voice sending.
+
 ## How app profiles override controls
 
 When CouchPilot matches the foreground app to a profile, it replaces only the bindings declared by that profile. For example, RB moves to the next tab in a browser, while pointer movement, scrolling, right click, voice input, and window switching remain global.

@@ -66,8 +66,8 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 | Typora, Obsidian | Previous / next tab | Find | New document | No automatic input focus |
 | VS Code | Previous / next tab | Command palette | Quick open | B dismisses |
 | PyCharm, IntelliJ, GoLand | — | Find | — | B dismisses |
-| QQ, WeChat | — | Find | — | B dismisses; A never auto-sends |
-| Claude, Cherry Studio | — | Find | — | B dismisses |
+| QQ, WeChat | — | Find | — | Voice edit whitelist: A sends, B deletes after Y |
+| Claude, Cherry Studio | — | Find | — | Voice edit whitelist: A sends, B deletes after Y |
 | QQ Music, Spotify, VLC | Previous / next track | Mute | Play / pause | Uses Windows media keys |
 | Acrobat, Word, Excel, PowerPoint | Page up / down | Find | — | — |
 | Windows Terminal | Previous / next tab | Command palette | New tab | B dismisses |
@@ -78,6 +78,8 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 `config.json` is the stable configuration contract for the CLI and a future UI. A UI only needs to validate and edit this file; the engine remains unchanged.
 
 Set `haptics_enabled` to `false` to disable vibration, or adjust `haptic_strength` from `0.0` to `2.0`. The default is `1.0`.
+
+`voice_submit_timeout_seconds` controls how long an app-specific voice compose mode remains armed. Codex, QQ/WeChat, Claude, and Cherry Studio are currently whitelisted: after `Y`, tap `A` to submit, tap `B` to delete one character, hold `B` to keep deleting, or move the pointer to restore normal mouse behavior. `RT+A` always submits in a whitelisted profile. Chat apps currently assume Enter-to-send.
 
 Bindings are optional overrides grouped by foreground-app profile. `app_profiles` controls which executable selects each profile; matching is case-insensitive, list items are alternatives, and `process_names` plus `path_contains` can disambiguate executables with the same name. Earlier rules win.
 
@@ -97,6 +99,11 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
     "notes": {
       "rb": "tab_next",
       "l3": "find"
+    },
+    "codex": {
+      "voice+a": "enter",
+      "voice+b": "backspace",
+      "rt+a": "enter"
     }
   }
 }
@@ -108,7 +115,7 @@ Set an action to an empty string to disable that exact binding. Run the followin
 .\bin\couchpilot.exe actions
 ```
 
-The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. The supplied `config.json` contains the full editable profile list.
+The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` and `voice+b` are contextual gestures available after voice input; the whitelisted Codex, chat, and assistant profiles use them for submit and repeatable Backspace. The supplied `config.json` contains the full editable profile list.
 
 To check which profile CouchPilot sees for the foreground app, focus that app and run:
 

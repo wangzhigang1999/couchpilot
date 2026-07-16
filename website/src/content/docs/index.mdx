@@ -1,57 +1,114 @@
 ---
-title: CouchPilot Field Guide
-description: Control your Windows desktop smoothly from a gamepad.
+title: CouchPilot — Gamepad control for your desktop
+description: Leave the keyboard behind. Navigate, dictate, edit, and switch apps from an Xbox-compatible gamepad.
 template: splash
-hero:
-  title: Pick up the gamepad. Take over the desktop.
-  tagline: CouchPilot turns a gamepad into a fast, configurable desktop controller. Find every global control, app-specific mapping, haptic cue, and safety rule here.
-  image:
-    alt: CouchPilot gamepad mark
-    file: ../../assets/couchpilot-mark.svg
-  actions:
-    - text: View global controls
-      link: /couchpilot/guide/controls/
-      icon: right-arrow
-    - text: Browse app mappings
-      link: /couchpilot/apps/
-      icon: open-book
-      variant: secondary
-    - text: GitHub
-      link: https://github.com/wangzhigang1999/couchpilot
-      icon: external
-      variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import couchpilotMark from '../../assets/couchpilot-mark.svg';
 
-<div className="stat-strip not-content">
-  <div><strong>12</strong><span>App profiles</span></div>
-  <div><strong>120 Hz</strong><span>Input polling</span></div>
-  <div><strong>0</strong><span>Runtime dependencies</span></div>
+<div className="cp-home not-content">
+  <section className="cp-home-hero">
+    <div className="cp-hero-copy">
+      <div className="cp-eyebrow"><span></span> Open-source · Windows · XInput</div>
+      <h1>Leave the keyboard.<br /><em>Keep the desktop in reach.</em></h1>
+      <p>CouchPilot turns an Xbox-compatible gamepad into a fast, app-aware desktop controller—complete with pointer control, voice editing, window switching, and haptic feedback.</p>
+      <div className="cp-hero-actions">
+        <a className="cp-button cp-button-primary" href="/couchpilot/guide/controls/">Explore the controls <span aria-hidden="true">→</span></a>
+        <a className="cp-button cp-button-secondary" href="/couchpilot/apps/">Browse app profiles</a>
+      </div>
+      <div className="cp-proof-row" aria-label="Project highlights">
+        <span><strong>12</strong> app profiles</span>
+        <span><strong>120 Hz</strong> input polling</span>
+        <span><strong>0</strong> runtime dependencies</span>
+      </div>
+    </div>
+
+    <div className="cp-command-deck" aria-label="Voice editing control flow">
+      <div className="cp-deck-glow"></div>
+      <header>
+        <div className="cp-deck-brand"><img src={couchpilotMark.src} alt="" /><span>Voice editing</span></div>
+        <span className="cp-live"><i></i> Ready</span>
+      </header>
+      <div className="cp-flow">
+        <div className="cp-flow-step cp-flow-step-active">
+          <kbd>Y</kbd>
+          <div><strong>Dictate</strong><span>Right Alt, once</span></div>
+        </div>
+        <div className="cp-flow-line"><span>1</span></div>
+        <div className="cp-flow-step">
+          <kbd>B</kbd>
+          <div><strong>Edit</strong><span>Tap or hold</span></div>
+        </div>
+        <div className="cp-flow-line"><span>2</span></div>
+        <div className="cp-flow-step cp-flow-step-send">
+          <kbd>A</kbd>
+          <div><strong>Send</strong><span>When it is ready</span></div>
+        </div>
+      </div>
+      <div className="cp-deck-rule"><span>Safe by design</span> Only active in whitelisted apps. Moving the pointer restores normal mouse controls.</div>
+    </div>
+  </section>
+
+  <section className="cp-home-section cp-how">
+    <div className="cp-section-heading">
+      <span>One controller, one mental model</span>
+      <h2>Natural controls that stay out of your way.</h2>
+      <p>The common actions stay global. App profiles add only the shortcuts that make sense in the foreground app.</p>
+    </div>
+    <div className="cp-feature-grid">
+      <a className="cp-feature-card" href="/couchpilot/guide/controls/">
+        <span className="cp-feature-number">01</span>
+        <div className="cp-stick-icon"><i></i></div>
+        <h3>Move directly</h3>
+        <p>The left stick moves the pointer immediately. Hold A to drag, select text, or move a window.</p>
+        <strong>Global controls →</strong>
+      </a>
+      <a className="cp-feature-card cp-feature-card-accent" href="/couchpilot/guide/window-switching/">
+        <span className="cp-feature-number">02</span>
+        <div className="cp-window-icon"><i></i><i></i><i></i></div>
+        <h3>Switch with intent</h3>
+        <p>Hold LT and browse every open window with LB or RB. Release LT to land on the one you want.</p>
+        <strong>Window switching →</strong>
+      </a>
+      <a className="cp-feature-card" href="/couchpilot/guide/haptics/">
+        <span className="cp-feature-number">03</span>
+        <div className="cp-wave-icon"><i></i><i></i><i></i></div>
+        <h3>Feel the result</h3>
+        <p>Subtle haptic cues distinguish navigation, mode changes, and confirmed actions without another overlay.</p>
+        <strong>Haptic language →</strong>
+      </a>
+    </div>
+  </section>
+
+  <section className="cp-home-section cp-apps-showcase">
+    <div className="cp-section-heading">
+      <span>Built for the apps you already use</span>
+      <h2>App-aware, never app-invasive.</h2>
+      <p>CouchPilot detects the foreground app and layers in a small, documented profile. Everything else keeps the global behavior you already learned.</p>
+    </div>
+    <div className="cp-app-grid">
+      <a href="/couchpilot/apps/codex/"><b>Co</b><span><strong>Codex</strong><small>Voice edit · tasks · terminal</small></span><em>Voice ready</em></a>
+      <a href="/couchpilot/apps/chat/"><b>Ch</b><span><strong>Chat</strong><small>QQ · WeChat · safe send</small></span><em>Voice ready</em></a>
+      <a href="/couchpilot/apps/browsers/"><b>Br</b><span><strong>Browsers</strong><small>Chrome · Edge · Firefox</small></span><em>Tabs</em></a>
+      <a href="/couchpilot/apps/assistants/"><b>AI</b><span><strong>Assistants</strong><small>Claude · Cherry Studio</small></span><em>Voice ready</em></a>
+      <a href="/couchpilot/apps/raycast/"><b>Ra</b><span><strong>Raycast</strong><small>Launcher as a game menu</small></span><em>Navigate</em></a>
+      <a href="/couchpilot/apps/vscode/"><b>VS</b><span><strong>VS Code</strong><small>Editor · command palette</small></span><em>Code</em></a>
+    </div>
+    <a className="cp-text-link" href="/couchpilot/apps/">See all 12 app profiles <span aria-hidden="true">→</span></a>
+  </section>
+
+  <section className="cp-home-section cp-safety-banner">
+    <div><span>Predictable by default</span><h2>Power without surprises.</h2></div>
+    <p>No automatic focus stealing. Voice send exists only inside an explicit, temporary state for whitelisted apps. Hold Back + Start whenever you need an immediate exit.</p>
+    <a className="cp-button cp-button-secondary" href="/couchpilot/guide/safety/">Read the safety rules</a>
+  </section>
+
+  <section className="cp-final-cta">
+    <img src={couchpilotMark.src} alt="CouchPilot gamepad mark" />
+    <div><span>Ready when you are</span><h2>Put the desktop on your couch.</h2></div>
+    <div className="cp-hero-actions">
+      <a className="cp-button cp-button-primary" href="/couchpilot/guide/controls/">Get started <span aria-hidden="true">→</span></a>
+      <a className="cp-button cp-button-secondary" href="https://github.com/wangzhigang1999/couchpilot">View on GitHub ↗</a>
+    </div>
+  </section>
 </div>
-
-## Start here
-
-<CardGrid>
-  <LinkCard title="Global controls" href="/couchpilot/guide/controls/" description="Pointer, scrolling, voice input, and emergency exit." />
-  <LinkCard title="Switch between many windows" href="/couchpilot/guide/window-switching/" description="Hold LT to browse every window, then release to select." />
-  <LinkCard title="Haptic language" href="/couchpilot/guide/haptics/" description="Feedback strength tells you which kind of action just ran." />
-  <LinkCard title="Safety rules" href="/couchpilot/guide/safety/" description="No focus stealing, accidental sends, or stopped Codex responses." />
-</CardGrid>
-
-## Frequent apps
-
-<CardGrid>
-  <LinkCard title="Codex" href="/couchpilot/apps/codex/" description="Tasks, command menu, terminal, and a safe right click." />
-  <LinkCard title="Browsers" href="/couchpilot/apps/browsers/" description="Tab navigation for Chrome, Edge, and Firefox." />
-  <LinkCard title="Raycast" href="/couchpilot/apps/raycast/" description="Use the launcher like a game menu." />
-  <LinkCard title="Typeless" href="/couchpilot/apps/typeless/" description="Trigger voice input with the physical right Alt key." />
-</CardGrid>
-
-## Design principles
-
-<CardGrid>
-  <Card title="Direct" icon="rocket">Move the pointer immediately. There is no mode to enter first.</Card>
-  <Card title="Predictable" icon="seti">An app profile overrides only the controls documented on its page.</Card>
-  <Card title="Safe" icon="shield-check">Chat apps never auto-send, and app switching never steals input focus.</Card>
-</CardGrid>

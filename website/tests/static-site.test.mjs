@@ -10,10 +10,14 @@ test("builds English-first bilingual pages for GitHub Pages", async () => {
     readFile(new URL("../dist/zh-cn/index.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(english, /Pick up the gamepad\. Take over the desktop\./);
+  assert.match(english, /Leave the keyboard/);
+  assert.match(english, /Voice editing/);
+  assert.match(english, /Only active in whitelisted apps/);
   assert.match(english, /<html lang="en"/);
   assert.match(english, /\/couchpilot\/zh-cn\//);
-  assert.match(chinese, /拿起手柄，接管桌面/);
+  assert.match(chinese, /放下键盘/);
+  assert.match(chinese, /语音编辑/);
+  assert.match(chinese, /只在白名单 App 中启用/);
   assert.match(chinese, /<html lang="zh-CN"/);
   assert.match(chinese, /\/couchpilot\/_astro\//);
   assert.doesNotMatch(english, /chatgpt\.site|vinext|wrangler/i);
@@ -39,20 +43,26 @@ test("publishes every app profile in English and Simplified Chinese", async () =
   }
 });
 
-test("keeps the safety rules in both languages", async () => {
-  const [englishCodex, englishChat, englishSafety, chineseCodex, chineseChat, chineseSafety] = await Promise.all([
+test("keeps the safety and voice-edit whitelist rules in both languages", async () => {
+  const [englishCodex, englishChat, englishAssistant, englishSafety, chineseCodex, chineseChat, chineseAssistant, chineseSafety] = await Promise.all([
     readFile(new URL("../src/content/docs/apps/codex.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/apps/chat.md", import.meta.url), "utf8"),
+    readFile(new URL("../src/content/docs/apps/assistants.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/guide/safety.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/zh-cn/apps/codex.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/zh-cn/apps/chat.md", import.meta.url), "utf8"),
+    readFile(new URL("../src/content/docs/zh-cn/apps/assistants.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/zh-cn/guide/safety.md", import.meta.url), "utf8"),
   ]);
 
   assert.match(englishCodex, /X always remains right click/);
-  assert.match(englishChat, /A is never mapped to Enter/);
+  assert.match(englishChat, /Outside the temporary voice-edit state, A remains the left mouse button/);
+  assert.match(englishAssistant, /After <kbd>Y<\/kbd>, tap <kbd>A<\/kbd>/);
   assert.match(englishSafety, /Never steals input focus/);
+  assert.match(englishSafety, /A sends only in an explicit voice-edit state/);
   assert.match(chineseCodex, /X 永远保持右键/);
-  assert.match(chineseChat, /A 不映射 Enter/);
+  assert.match(chineseChat, /离开临时语音编辑状态后，A 仍然是鼠标左键/);
+  assert.match(chineseAssistant, /按过 <kbd>Y<\/kbd> 后，轻按 <kbd>A<\/kbd>/);
   assert.match(chineseSafety, /不会自动抢输入框/);
+  assert.match(chineseSafety, /A 只在明确的语音编辑状态发送/);
 });
