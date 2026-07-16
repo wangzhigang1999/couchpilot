@@ -7,6 +7,8 @@
 [![CI](https://github.com/wangzhigang1999/couchpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/wangzhigang1999/couchpilot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**[Open the searchable CouchPilot Field Guide →](https://couchpilot-guide.iamzhigangwang.chatgpt.site)**
+
 **Pilot your desktop from a gamepad. Fast, configurable, and cross-platform by design.**
 
 CouchPilot is a small, portable Go program that turns a gamepad into a desktop controller. Windows and XInput are supported today; the core and mapping engine are platform-neutral so additional desktop and device adapters can be added cleanly.
