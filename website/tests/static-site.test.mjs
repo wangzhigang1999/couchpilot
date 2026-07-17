@@ -11,11 +11,13 @@ test("builds English-first bilingual pages for GitHub Pages", async () => {
   ]);
 
   assert.match(english, /Leave the keyboard/);
+  assert.match(english, /Desktop control · without the desk/);
   assert.match(english, /Voice editing/);
   assert.match(english, /Only active in whitelisted apps/);
   assert.match(english, /<html lang="en"/);
   assert.match(english, /\/couchpilot\/zh-cn\//);
   assert.match(chinese, /放下键盘/);
+  assert.match(chinese, /离开桌子，也能掌控桌面/);
   assert.match(chinese, /语音编辑/);
   assert.match(chinese, /只在白名单 App 中启用/);
   assert.match(chinese, /<html lang="zh-CN"/);
