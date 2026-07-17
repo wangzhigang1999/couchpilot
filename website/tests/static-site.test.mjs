@@ -78,5 +78,9 @@ test("keeps the homepage mobile-first and free of the old blue gradient theme", 
   assert.match(css, /@media \(max-width: 38rem\)/);
   assert.match(css, /\.cp-button\s*\{[^}]*width:\s*100%/s);
   assert.match(css, /overflow-x:\s*hidden/);
+  assert.match(css, /\.cp-flow-line\s*\{[^}]*place-items:\s*center/s);
+  assert.match(css, /\.cp-home \.cp-flow-line > span\s*\{[^}]*line-height:\s*1/s);
+  assert.doesNotMatch(css, /\.cp-flow-line\s*\{[^}]*border-left/s);
+  assert.doesNotMatch(css, /\.cp-command-deck::before/);
   assert.doesNotMatch(`${css}\n${mark}\n${favicon}`, /cyan|violet|linearGradient|radial-gradient|linear-gradient|backdrop-filter|blur\(/i);
 });
