@@ -27,6 +27,8 @@ Usage:
   couchpilot start [--config config.json] [--verbose]
   couchpilot stop [--config config.json]
   couchpilot status [--config config.json]
+  couchpilot install [--config config.json] [--verbose]
+  couchpilot uninstall [--config config.json]
   couchpilot doctor [--config config.json]
   couchpilot profile [--config config.json]
   couchpilot actions
@@ -102,6 +104,25 @@ func execute(args []string) error {
 		} else {
 			fmt.Println("not running")
 		}
+		return nil
+	case "install":
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		if err := daemon.InstallAutostart(executable, absoluteConfig, options.verbose); err != nil {
+			return err
+		}
+		fmt.Println("installed startup task and started CouchPilot")
+		return nil
+	case "uninstall":
+		if _, err := daemon.Stop(paths); err != nil {
+			return err
+		}
+		if err := daemon.UninstallAutostart(); err != nil {
+			return err
+		}
+		fmt.Println("removed startup task")
 		return nil
 	case "doctor":
 		return doctor(options.configPath)

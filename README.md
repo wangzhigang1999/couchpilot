@@ -18,7 +18,7 @@ The runtime is a single executable with no Python, C toolchain, or external runt
 ## Run
 
 ```powershell
-cd D:\couchpilot
+cd <path-to-couchpilot>
 .\bin\couchpilot.exe doctor
 .\bin\couchpilot.exe start --verbose
 .\bin\couchpilot.exe status
@@ -28,6 +28,18 @@ Stop the background process cleanly:
 
 ```powershell
 .\bin\couchpilot.exe stop
+```
+
+Install CouchPilot to start automatically when you sign in to Windows. The scheduled task also retries the process every minute after an unexpected failure, up to 10 times:
+
+```powershell
+.\bin\couchpilot.exe install
+```
+
+Installation starts CouchPilot immediately. A normal `stop` does not trigger a retry. To stop CouchPilot and remove the startup task:
+
+```powershell
+.\bin\couchpilot.exe uninstall
 ```
 
 Holding **Back + Start** for 1.5 seconds is still the emergency exit.
