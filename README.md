@@ -24,6 +24,15 @@ cd <path-to-couchpilot>
 .\bin\couchpilot.exe status
 ```
 
+When CouchPilot is running on Windows, its small controller icon appears in
+the notification area. Right-click it to open the logs or configuration
+folder, or to exit CouchPilot cleanly. Windows may place a new icon under the
+notification-area overflow arrow the first time it runs.
+
+You can also double-click `couchpilot.exe`: Explorer launches it directly in
+the background without leaving a console window open. Running the same file
+from PowerShell keeps the normal terminal behavior and output.
+
 Stop the background process cleanly:
 
 ```powershell

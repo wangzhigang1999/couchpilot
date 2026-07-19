@@ -18,6 +18,7 @@ import (
 	"github.com/wangzhigang1999/couchpilot/internal/daemon"
 	"github.com/wangzhigang1999/couchpilot/internal/engine"
 	"github.com/wangzhigang1999/couchpilot/internal/platform"
+	"github.com/wangzhigang1999/couchpilot/internal/tray"
 )
 
 const usage = `CouchPilot
@@ -42,7 +43,7 @@ type options struct {
 }
 
 func main() {
-	if err := execute(os.Args[1:]); err != nil {
+	if err := execute(prepareLaunchArgs(os.Args[1:])); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
@@ -75,6 +76,12 @@ func execute(args []string) error {
 	paths := daemon.RuntimePaths(absoluteConfig)
 	switch command {
 	case "run":
+		if options.pidFile == "" {
+			options.pidFile = paths.PIDFile
+		}
+		if options.stopFile == "" {
+			options.stopFile = paths.StopFile
+		}
 		return run(options)
 	case "start":
 		executable, err := os.Executable()
@@ -170,13 +177,26 @@ func run(options options) error {
 		defer os.Remove(options.stopFile)
 		go watchStopFile(ctx, options.stopFile, cancel)
 	}
-	controller := engine.New(settings, gamepad, desktop, options.verbose, os.Stdout)
-	err = controller.Run(ctx)
-	if errors.Is(err, engine.ErrExitRequested) {
-		fmt.Println("emergency exit")
-		return nil
+	paths := daemon.RuntimePaths(options.configPath)
+	trayDone, err := tray.Start(ctx, cancel, paths.LogFile, options.configPath)
+	if err != nil {
+		return fmt.Errorf("start system tray: %w", err)
 	}
-	return err
+	controller := engine.New(settings, gamepad, desktop, options.verbose, os.Stdout)
+	runErr := controller.Run(ctx)
+	cancel()
+	trayErr := <-trayDone
+	if errors.Is(runErr, engine.ErrExitRequested) {
+		fmt.Println("emergency exit")
+		runErr = nil
+	}
+	if runErr != nil {
+		return runErr
+	}
+	if trayErr != nil {
+		return fmt.Errorf("system tray: %w", trayErr)
+	}
+	return nil
 }
 
 func showProfile(configPath string) error {

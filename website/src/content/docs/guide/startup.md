@@ -13,6 +13,10 @@ From the CouchPilot folder, install the Windows startup task once:
 
 CouchPilot starts immediately and starts automatically whenever you sign in to Windows. If the process fails unexpectedly, Windows retries it every minute, up to 10 times.
 
+While it is running, a small controller icon is available in the Windows notification area. Right-click it to open the logs or configuration folder, or to exit CouchPilot cleanly. Windows may initially place a new icon under the overflow arrow.
+
+Double-clicking `couchpilot.exe` in Explorer also starts it in the background without leaving a console window open. Launching it from PowerShell keeps the normal terminal behavior and output.
+
 Use the normal commands to check or stop the current process:
 
 ```powershell
