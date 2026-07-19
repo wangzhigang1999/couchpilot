@@ -18,10 +18,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test ./...
-      - run: go vet ./...
-      - shell: pwsh
-        run: go build -trimpath -ldflags "-s -w" -o bin/couchpilot.exe ./cmd/couchpilot
+      - name: Test and build
+        shell: pwsh
+        run: .\scripts\build.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: couchpilot-windows-amd64

@@ -40,6 +40,7 @@ export default defineConfig({
           translations: { "zh-CN": "开始使用" },
           items: [
             { slug: "guide/controls" },
+            { slug: "guide/startup" },
             { slug: "guide/window-switching" },
             { slug: "guide/haptics" },
             { slug: "guide/safety" },
