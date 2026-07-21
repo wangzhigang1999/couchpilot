@@ -127,7 +127,10 @@ type Desktop interface {
 	MovePointer(dx, dy int) error
 	Scroll(amount int) error
 	Perform(Action) error
-	ForegroundProfile() string
+	// ForegroundContext returns the matched CouchPilot profile and the
+	// foreground executable's base name. It never returns the full process path
+	// or a window title.
+	ForegroundContext() (profile, processName string)
 }
 
 type Clock interface {

@@ -69,6 +69,43 @@ test("keeps the safety and voice-edit whitelist rules in both languages", async 
   assert.match(chineseSafety, /A 只在明确的语音编辑状态发送/);
 });
 
+test("documents privacy-safe key-strategy tracing in both languages", async () => {
+  const [english, chinese] = await Promise.all([
+    readFile(new URL("../dist/guide/usage-stats/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../dist/zh-cn/guide/usage-stats/index.html", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(english, /local-only aggregate facts/i);
+  assert.match(english, /input-usage files do not record typed text/i);
+  assert.match(english, /foreground executable base name/i);
+  assert.match(english, /do not record.*full process paths/i);
+  assert.match(english, /pointer coordinates.*precise input timeline/i);
+  assert.match(english, /90 days/i);
+  assert.match(english, /chord near-miss/i);
+  assert.match(english, /suspected correction/i);
+  assert.match(english, /dispatch succeeded.*dispatch failed/i);
+  assert.match(english, /not proof that the user intended the chord/i);
+  assert.match(english, /Nothing from these records is uploaded/i);
+  assert.match(english, /about once a minute/i);
+  assert.match(english, /usage-v1-report\.html/i);
+  assert.match(english, /Acceptance check/i);
+  assert.match(english, /local_usage_stats_enabled/);
+  assert.match(chinese, /本地按键统计文件不会记录你输入的文字/);
+  assert.match(chinese, /前台程序的可执行文件名/);
+  assert.match(chinese, /不会保存窗口标题、完整进程路径/);
+  assert.match(chinese, /鼠标坐标或精确的按键时间线/);
+  assert.match(chinese, /保留 90 天/);
+  assert.match(chinese, /组合键近失误/);
+  assert.match(chinese, /疑似纠正/);
+  assert.match(chinese, /派发成功.*派发失败/);
+  assert.match(chinese, /不能证明用户当时就想按那个组合键/);
+  assert.match(chinese, /绝不会上传/);
+  assert.match(chinese, /大约每分钟/);
+  assert.match(chinese, /usage-v1-report\.html/i);
+  assert.match(chinese, /一分钟验收/);
+  assert.match(chinese, /local_usage_stats_enabled/);
+});
+
 test("keeps the homepage mobile-first and free of the old blue gradient theme", async () => {
   const [css, mark, favicon] = await Promise.all([
     readFile(new URL("../src/styles/custom.css", import.meta.url), "utf8"),

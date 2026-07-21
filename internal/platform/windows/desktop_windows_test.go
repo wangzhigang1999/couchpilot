@@ -38,3 +38,15 @@ func TestFirstMatchingProfileWins(t *testing.T) {
 		t.Fatalf("got %q, want specific", got)
 	}
 }
+
+func TestProcessNameFromPathReturnsOnlyExecutableBaseName(t *testing.T) {
+	for path, want := range map[string]string{
+		`C:\Program Files\Google\Chrome\Application\chrome.exe`: "chrome.exe",
+		`C:/Program Files/OpenAI/ChatGPT.exe`:                   "ChatGPT.exe",
+		`explorer.exe`:                                          "explorer.exe",
+	} {
+		if got := processNameFromPath(path); got != want {
+			t.Fatalf("processNameFromPath(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

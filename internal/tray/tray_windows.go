@@ -57,14 +57,16 @@ const (
 	tpmWorkArea    = 0x10000
 
 	monitorDefaultToNearest = 0x00000002
+	swShowNormal            = 1
 
 	idiApplication = 32512
 	idcArrow       = 32512
 	appIconID      = 1
 
 	menuOpenLogs       = 1001
-	menuOpenConfig     = 1002
-	menuExitCouchPilot = 1003
+	menuOpenUsage      = 1002
+	menuOpenConfig     = 1003
+	menuExitCouchPilot = 1004
 )
 
 var (
@@ -75,6 +77,7 @@ var (
 	procGetModuleHandleW       = kernel32.NewProc("GetModuleHandleW")
 	procShellNotifyIconW       = shell32.NewProc("Shell_NotifyIconW")
 	procShellNotifyIconGetRect = shell32.NewProc("Shell_NotifyIconGetRect")
+	procShellExecuteW          = shell32.NewProc("ShellExecuteW")
 	procAppendMenuW            = user32.NewProc("AppendMenuW")
 	procCreatePopupMenu        = user32.NewProc("CreatePopupMenu")
 	procCreateWindowExW        = user32.NewProc("CreateWindowExW")
@@ -178,6 +181,7 @@ type nativeTray struct {
 	cancel          context.CancelFunc
 	configDirectory string
 	logDirectory    string
+	usageReportPath string
 	instance        winapi.Handle
 	window          winapi.Handle
 	menu            winapi.Handle
@@ -192,13 +196,14 @@ type nativeTray struct {
 // returned channel completes after the icon and hidden window have both been
 // removed. Calling cancel, whether from the tray menu or another worker exit
 // path, begins that cleanup.
-func Start(ctx context.Context, cancel context.CancelFunc, logPath, configPath string) (<-chan error, error) {
+func Start(ctx context.Context, cancel context.CancelFunc, logPath, configPath, usageReportPath string) (<-chan error, error) {
 	ready := make(chan error, 1)
 	done := make(chan error, 1)
 	tray := &nativeTray{
 		cancel:          cancel,
 		configDirectory: filepath.Dir(configPath),
 		logDirectory:    filepath.Dir(logPath),
+		usageReportPath: usageReportPath,
 	}
 	go func() {
 		err := tray.run(ctx, ready)
@@ -352,6 +357,11 @@ func (t *nativeTray) buildMenu() error {
 	}
 	if err := appendMenu(t.menu, mfString, menuOpenLogs, "打开日志"); err != nil {
 		return err
+	}
+	if t.usageReportPath != "" {
+		if err := appendMenu(t.menu, mfString, menuOpenUsage, "查看按键报告"); err != nil {
+			return err
+		}
 	}
 	if err := appendMenu(t.menu, mfString, menuOpenConfig, "打开配置目录"); err != nil {
 		return err
@@ -575,6 +585,8 @@ func (t *nativeTray) handleCommand(command uint32) {
 	switch command {
 	case menuOpenLogs:
 		err = openDirectory(t.logDirectory)
+	case menuOpenUsage:
+		err = openFile(t.usageReportPath)
 	case menuOpenConfig:
 		err = openDirectory(t.configDirectory)
 	case menuExitCouchPilot:
@@ -625,6 +637,34 @@ func openDirectory(path string) error {
 	}
 	if err := exec.Command("explorer.exe", path).Start(); err != nil {
 		return fmt.Errorf("open directory %s: %w", path, err)
+	}
+	return nil
+}
+
+func openFile(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("locate file %s: %w", path, err)
+	}
+	verb, err := winapi.UTF16PtrFromString("open")
+	if err != nil {
+		return err
+	}
+	file, err := winapi.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	result, _, _ := procShellExecuteW.Call(
+		0,
+		uintptr(unsafe.Pointer(verb)),
+		uintptr(unsafe.Pointer(file)),
+		0,
+		0,
+		swShowNormal,
+	)
+	runtime.KeepAlive(verb)
+	runtime.KeepAlive(file)
+	if result <= 32 {
+		return fmt.Errorf("open file %s: ShellExecuteW code %d", path, result)
 	}
 	return nil
 }

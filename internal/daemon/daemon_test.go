@@ -1,11 +1,15 @@
 package daemon
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestClaimPIDLifecycle(t *testing.T) {
@@ -24,5 +28,174 @@ func TestClaimPIDLifecycle(t *testing.T) {
 	release()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("pid file should be removed")
+	}
+}
+
+func TestClaimPIDAtomicallyExcludesCanonicalAlias(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "app.pid")
+	firstRelease, err := ClaimPID(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstRelease()
+
+	alias := filepath.Join(directory, ".", "app.pid")
+	if release, err := ClaimPID(alias); err == nil {
+		release()
+		t.Fatal("second ClaimPID unexpectedly acquired the same canonical process lock")
+	}
+
+	firstRelease()
+	secondRelease, err := ClaimPID(alias)
+	if err != nil {
+		t.Fatalf("ClaimPID after release: %v", err)
+	}
+	secondRelease()
+}
+
+func TestClaimPIDConcurrentSingleWinner(t *testing.T) {
+	const contenders = 32
+	path := filepath.Join(t.TempDir(), "app.pid")
+	start := make(chan struct{})
+	type result struct {
+		release func()
+		err     error
+	}
+	results := make(chan result, contenders)
+	var wait sync.WaitGroup
+	wait.Add(contenders)
+	for index := 0; index < contenders; index++ {
+		go func() {
+			defer wait.Done()
+			<-start
+			release, err := ClaimPID(path)
+			results <- result{release: release, err: err}
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+
+	var winner func()
+	for result := range results {
+		if result.err != nil {
+			continue
+		}
+		if winner != nil {
+			result.release()
+			winner()
+			t.Fatal("multiple concurrent ClaimPID calls acquired the same process lock")
+		}
+		winner = result.release
+	}
+	if winner == nil {
+		t.Fatal("no concurrent ClaimPID call acquired the process lock")
+	}
+	winner()
+}
+
+func TestClaimPIDReplacesStalePIDAfterAcquiringKernelLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.pid")
+	if err := os.WriteFile(path, []byte("999999999\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	release, err := ClaimPID(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(data)) != strconv.Itoa(os.Getpid()) {
+		t.Fatalf("stale pid was not replaced: %q", data)
+	}
+}
+
+func TestClaimPIDKernelLockIsReleasedAfterOwnerCrash(t *testing.T) {
+	const helperEnvironment = "COUCHPILOT_PID_LOCK_HELPER"
+	if os.Getenv(helperEnvironment) == "1" {
+		path := os.Getenv("COUCHPILOT_PID_LOCK_PATH")
+		ready := os.Getenv("COUCHPILOT_PID_LOCK_READY")
+		release, err := ClaimPID(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Keep both the release closure and a live timer reachable. A bare
+		// select{} lets the Go runtime treat this helper as deadlocked and exit,
+		// which would release the kernel mutex before the parent competes for it.
+		defer release()
+		if err := os.WriteFile(ready, []byte("ready\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			time.Sleep(time.Hour)
+		}
+	}
+
+	path := filepath.Join(t.TempDir(), "app.pid")
+	ready := filepath.Join(t.TempDir(), "ready")
+	command := exec.Command(os.Args[0], "-test.run=^TestClaimPIDKernelLockIsReleasedAfterOwnerCrash$")
+	var childOutput bytes.Buffer
+	command.Stdout = &childOutput
+	command.Stderr = &childOutput
+	command.Env = append(os.Environ(),
+		helperEnvironment+"=1",
+		"COUCHPILOT_PID_LOCK_PATH="+path,
+		"COUCHPILOT_PID_LOCK_READY="+ready,
+	)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	childExited := false
+	t.Cleanup(func() {
+		if !childExited {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	})
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pid lock helper did not become ready: %s", childOutput.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if release, err := ClaimPID(path); err == nil {
+		release()
+		t.Fatal("parent acquired PID lock while helper process held it")
+	}
+	if err := command.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_ = command.Wait()
+	childExited = true
+
+	release, err := ClaimPID(path)
+	if err != nil {
+		t.Fatalf("ClaimPID after helper crash: %v", err)
+	}
+	release()
+}
+
+func TestRuntimePathsKeepUsageDataBesideConfig(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "portable")
+	paths := RuntimePaths(filepath.Join(base, "config.json"))
+	if paths.UsageDirectory != filepath.Join(base, "usage") {
+		t.Fatalf("usage directory = %q", paths.UsageDirectory)
+	}
+	if paths.UsageSnapshotFile != filepath.Join(base, "usage", "usage-v1.snapshot.json") {
+		t.Fatalf("usage snapshot = %q", paths.UsageSnapshotFile)
+	}
+	if paths.UsageWALFile != filepath.Join(base, "usage", "usage-v1.wal.jsonl") {
+		t.Fatalf("usage WAL = %q", paths.UsageWALFile)
+	}
+	if paths.UsageReportFile != filepath.Join(base, "usage", "usage-v1-report.html") {
+		t.Fatalf("usage report = %q", paths.UsageReportFile)
 	}
 }

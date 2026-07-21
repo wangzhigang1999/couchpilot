@@ -17,8 +17,24 @@ func TestLoadPartialConfigAndKeepDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.ControllerIndex != 1 || settings.PollHz != 120 || settings.VoiceKey != "right_alt" || len(settings.AppProfiles) == 0 {
+	if settings.ControllerIndex != 1 || settings.PollHz != 120 || settings.VoiceKey != "right_alt" || !settings.LocalUsageStatsEnabled || len(settings.AppProfiles) == 0 {
 		t.Fatalf("unexpected settings: %+v", settings)
+	}
+}
+
+func TestLocalUsageStatsCanBeDisabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	settings := Default()
+	settings.LocalUsageStatsEnabled = false
+	if err := Save(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.LocalUsageStatsEnabled {
+		t.Fatal("local usage stats should remain disabled after a round trip")
 	}
 }
 
