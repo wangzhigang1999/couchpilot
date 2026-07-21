@@ -98,7 +98,7 @@ func (g *Gamepad) readIndex(index int, deadzone float64) (core.State, bool, erro
 	rightX, rightY := normalizeStick(raw.Gamepad.ThumbRX, raw.Gamepad.ThumbRY, deadzone)
 	return core.State{
 		PacketNumber: raw.PacketNumber,
-		Buttons:      core.Button(raw.Gamepad.Buttons),
+		Buttons:      mapXInputButtons(raw.Gamepad.Buttons),
 		LeftTrigger:  float64(raw.Gamepad.LeftTrigger) / 255,
 		RightTrigger: float64(raw.Gamepad.RightTrigger) / 255,
 		LeftX:        leftX,
@@ -106,6 +106,28 @@ func (g *Gamepad) readIndex(index int, deadzone float64) (core.State, bool, erro
 		RightX:       rightX,
 		RightY:       rightY,
 	}, true, nil
+}
+
+func mapXInputButtons(raw uint16) core.Button {
+	var buttons core.Button
+	mappings := [...]struct {
+		raw    uint16
+		button core.Button
+	}{
+		{0x0001, core.DPadUp}, {0x0002, core.DPadDown},
+		{0x0004, core.DPadLeft}, {0x0008, core.DPadRight},
+		{0x0010, core.Start}, {0x0020, core.Back},
+		{0x0040, core.LeftThumb}, {0x0080, core.RightThumb},
+		{0x0100, core.LeftShoulder}, {0x0200, core.RightShoulder},
+		{0x1000, core.A}, {0x2000, core.B},
+		{0x4000, core.X}, {0x8000, core.Y},
+	}
+	for _, mapping := range mappings {
+		if raw&mapping.raw != 0 {
+			buttons |= mapping.button
+		}
+	}
+	return buttons
 }
 
 func (g *Gamepad) Rumble(device core.DeviceID, left, right uint16) error {

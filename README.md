@@ -11,7 +11,7 @@
 
 **Pilot your desktop from a gamepad. Fast, configurable, and cross-platform by design.**
 
-CouchPilot is a small, portable Go program that turns a gamepad into a desktop controller. Windows and XInput are supported today; the core and mapping engine are platform-neutral so additional desktop and device adapters can be added cleanly.
+CouchPilot is a small, portable Go program that turns a gamepad into a desktop controller. Windows/XInput and macOS game controllers are supported today; the core and mapping engine remain platform-neutral.
 
 The runtime is a single executable with no Python, C toolchain, or external runtime dependency.
 
@@ -25,8 +25,8 @@ cd <path-to-couchpilot>
 ```
 
 When CouchPilot is running on Windows, its small controller icon appears in
-the notification area. Right-click it to view the local key-strategy report,
-open logs or configuration, or exit CouchPilot cleanly. Windows may
+the notification area. Right-click it to open logs or configuration, or exit
+CouchPilot cleanly. Windows may
 place a new icon under the notification-area overflow arrow the first time it
 runs.
 
@@ -54,63 +54,21 @@ Installation starts CouchPilot immediately. A normal `stop` does not trigger a r
 
 Holding **Back + Start** for 1.5 seconds is still the emergency exit.
 
-## Local key-strategy tracing
+## Local diagnostic trace
 
-CouchPilot records small, local-only aggregate facts to make later binding
-decisions evidence-based. Besides button and recognized-chord counts, it keeps
-the foreground executable's base name (for example `ChatGPT.exe` or
-`chrome.exe`), the active and winning mapping profiles, the selected action,
-and the current mapping-strategy revision. Coarse tracing also distinguishes
-physical overlap from the gesture that was finally resolved, groups hold and
-transition timing into broad buckets, and summarizes interaction, compose,
-window-switching, and repeat episodes. This is meant to answer which bindings
-are useful in each app, which chords may be awkward, and where a remap deserves
-an experiment. CouchPilot still does not change bindings automatically.
+CouchPilot can append a small diagnostic fact for each physical activation or
+resolved action to `trace/trace.jsonl` beside `config.json`. Each line is one
+JSON object containing the timestamp, foreground executable's base name,
+matched profile, physical control, resolved action and dispatch outcome. It
+does not record typed text, window titles, full process paths, controller IDs
+or pointer coordinates, and nothing is uploaded.
 
-The recorder does **not** install a keyboard hook or save typed text, window
-titles, full process paths, controller identifiers, pointer coordinates, or
-an exact timestamped input timeline. It keeps only the executable base name,
-never its location. Timing and episode signals are stored only as daily local
-aggregate facts in coarse buckets. While recording is enabled, compaction
-keeps a rolling 90-day window; turning recording off freezes the existing
-local files until they are removed manually. Nothing is uploaded. Data stays
-beside `config.json` in
-`usage\usage-v1.snapshot.json`; the neighboring JSONL file is a bounded crash-
-recovery journal, not a browsing history.
-
-While new observations are pending, the snapshot refreshes automatically
-about once a minute. The snapshot and the recent journal together form the
-current durable record; `usage-v1.snapshot.json.bak` is an internal recovery
-copy.
-
-Right-click the tray icon and choose **查看按键报告** to open a readable local
-HTML report, or print the same live summary in a terminal:
-
-```powershell
-.\bin\couchpilot.exe usage
-```
-
-For a quick acceptance check, note the current count for one button, press it
-three times, wait about ten seconds (up to fifteen), then refresh the report.
-The count should increase by three and the button should disappear from the
-current-strategy not-observed list. Test a defined chord such as `LT+RB` the
-same way. After a
-little normal use, the strategy section can also surface chord near-misses and
-suspected corrections. A near-miss means physical controls overlapped without
-resolving to that chord; a suspected correction means a coarse follow-up
-pattern looked corrective. Trigger probes observed during pointer or stick
-activity are shown as ambiguous and excluded from the recommendation
-denominator. Recommendations also require a denominator, a minimum rate, and
-evidence on more than one day. None of these signals proves the user's intent
-or an actual mistake, so treat them as leads to investigate rather than
-automatic remapping rules. Likewise, **dispatch succeeded/failed** describes
-only whether CouchPilot sent the system action, not whether the user's task
-succeeded.
-
-Local aggregate recording is enabled by default. Set
-`local_usage_stats_enabled` to `false` to stop adding observations. Existing
-records and the tray report remain available until you stop CouchPilot and
-remove the `usage` folder.
+This file is deliberately not a statistics feature: there is no report,
+dashboard, recommendation engine, aggregation database or tray menu for it.
+It exists only for inspecting a mapping or dispatch problem. Set
+`local_trace_enabled` to `false` to stop appending new lines. The single file
+is capped at 8 MiB; when the next line would exceed that limit, CouchPilot
+clears it and starts again instead of creating rotations or backups.
 
 ## Controls
 
@@ -122,11 +80,15 @@ remove the `usage` folder.
 | A | Left click; hold while moving the left stick to drag or select |
 | B | Back (`Alt+Left`) |
 | X | Right click; supports right-button drag |
-| Y | Tap physical right Alt for voice input |
+| Y | Voice input: Fn on macOS, right Alt on Windows |
 | LT | Precision pointer speed |
 | RT | Boost pointer speed |
 | LT + M1 / RB | Next Windows window |
 | LT + M2 / LB | Previous Windows window |
+
+On macOS, RB/LB use Control+Tab and Control+Shift+Tab for tab navigation;
+holding LT changes them to Command+Tab window switching. On Windows the
+corresponding shortcuts remain Control+Tab and Alt+Tab.
 
 Haptic feedback is enabled by default: clicks use a light tick, navigation uses a short pulse, voice activation is more noticeable, and window switching/commit uses the strongest confirmation. Controller connection also produces one short pulse.
 
@@ -142,16 +104,6 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 |---|---|---|---|---|
 | Codex | Previous / next task | Command menu | Terminal | B goes back; X stays right-click |
 | Chrome, Edge, Firefox | Previous / next tab | Address bar | New tab | B navigates back |
-| Raycast | Selection up / down | — | — | A confirms; B dismisses |
-| Typora, Obsidian | Previous / next tab | Find | New document | No automatic input focus |
-| VS Code | Previous / next tab | Command palette | Quick open | B dismisses |
-| PyCharm, IntelliJ, GoLand | — | Find | — | B dismisses |
-| QQ, WeChat | — | Find | — | Voice edit whitelist: A sends, B deletes after Y |
-| Claude, Cherry Studio | — | Find | — | Voice edit whitelist: A sends, B deletes after Y |
-| QQ Music, Spotify, VLC | Previous / next track | Mute | Play / pause | Uses Windows media keys |
-| Acrobat, Word, Excel, PowerPoint | Page up / down | Find | — | — |
-| Windows Terminal | Previous / next tab | Command palette | New tab | B dismisses |
-| Typeless | — | — | — | B dismisses; Y still uses right Alt |
 
 ## Configuration and future UI
 
@@ -159,10 +111,14 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 
 Set `haptics_enabled` to `false` to disable vibration, or adjust `haptic_strength` from `0.0` to `2.0`. The default is `1.0`.
 
-Set `local_usage_stats_enabled` to `false` to disable the local aggregate
-key-strategy facts described above. This setting never enables network upload.
+Set `local_trace_enabled` to `false` to disable the local JSONL diagnostic
+trace described above. This setting never enables network upload.
 
-`voice_submit_timeout_seconds` controls how long an app-specific voice compose mode remains armed. Codex, QQ/WeChat, Claude, and Cherry Studio are currently whitelisted: after `Y`, tap `A` to submit, tap `B` to delete one character, hold `B` to keep deleting, or move the pointer to restore normal mouse behavior. `RT+A` always submits in a whitelisted profile. Chat apps currently assume Enter-to-send.
+`voice_key` defaults to `platform_default`: Y sends Fn on macOS and right Alt
+on Windows. Explicit `right_alt` and `left_alt` remain available on both
+platforms; macOS also accepts `fn`.
+
+`voice_submit_timeout_seconds` controls how long Codex voice compose mode remains armed. After `Y`, tap `A` to submit, tap `B` to delete one character, hold `B` to keep deleting, or move the pointer to restore normal mouse behavior. `RT+A` always submits in Codex.
 
 Bindings are optional overrides grouped by foreground-app profile. `app_profiles` controls which executable selects each profile; matching is case-insensitive, list items are alternatives, and `process_names` plus `path_contains` can disambiguate executables with the same name. Earlier rules win.
 
@@ -170,8 +126,8 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
 {
   "app_profiles": [
     {
-      "name": "notes",
-      "process_names": ["Typora.exe", "Obsidian.exe"]
+      "name": "chrome",
+      "process_names": ["chrome.exe", "Google Chrome"]
     }
   ],
   "bindings": {
@@ -179,9 +135,9 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
       "a": "click_left",
       "lt+rb": "window_next"
     },
-    "notes": {
+    "chrome": {
       "rb": "tab_next",
-      "l3": "find"
+      "l3": "focus_location"
     },
     "codex": {
       "voice+a": "enter",
@@ -198,7 +154,7 @@ Set an action to an empty string to disable that exact binding. Run the followin
 .\bin\couchpilot.exe actions
 ```
 
-The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` and `voice+b` are contextual gestures available after voice input; the whitelisted Codex, chat, and assistant profiles use them for submit and repeatable Backspace. The supplied `config.json` contains the full editable profile list.
+The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` and `voice+b` are contextual gestures used by Codex for submit and repeatable Backspace. The supplied `config.json` contains the editable Codex and Chrome profiles; all other apps use the `default` bindings.
 
 To check which profile CouchPilot sees for the foreground app, focus that app and run:
 
@@ -208,11 +164,14 @@ To check which profile CouchPilot sees for the foreground app, focus that app an
 
 ## Architecture
 
-- `internal/core`: platform-neutral device state, actions and narrow interfaces.
-- `internal/engine`: pointer math, edge detection, profiles and configurable binding resolution.
-- `internal/usage`: 90-day local key-strategy aggregates with crash-recovery journaling.
+- `cmd/couchpilot`: process supervision; native UI stays on the main thread and the engine runs as a worker.
+- `internal/core`: platform-neutral semantic device state, actions and narrow capability interfaces.
+- `internal/engine`: pointer/scroll math, edge detection, profiles and binding resolution.
+- `internal/trace`: append-only local JSONL diagnostics.
 - `internal/platform/windows`: XInput and Windows desktop output.
-- `internal/platform`: platform factory; a future macOS adapter can implement the same interfaces.
+- `internal/platform/macos`: GameController/IOHID input and CoreGraphics desktop output.
+- `internal/platform`: independent gamepad and desktop factories; diagnostics do not initialize unrelated adapters.
+- `internal/tray`: a shared lifecycle contract with native Windows and macOS implementations.
 - `internal/config`: versioned JSON schema shared by the CLI and future UI.
 
 This is intentionally an adapter boundary, not a plugin framework. Additional gamepads or desktop platforms can be added without changing the mapping engine.
@@ -224,6 +183,48 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
 ```
 
 The script uses project-local Go caches, runs tests and static checks, then creates `bin\couchpilot.exe`. The executable has no Go, Python, or C runtime dependency to install.
+
+### macOS
+
+Build the native Apple Silicon executable on a Mac:
+
+```sh
+./scripts/build-macos.sh
+./bin/CouchPilot.app/Contents/MacOS/CouchPilot doctor --config config.json
+./bin/CouchPilot.app/Contents/MacOS/CouchPilot start --config config.json --verbose
+```
+
+The build creates both a raw CLI executable and `bin/CouchPilot.app`. Use the
+executable inside the application bundle for normal macOS operation so AppKit
+can register CouchPilot as a menu-bar application. Double-clicking the app uses
+`~/Library/Application Support/CouchPilot/config.json`; command-line `--config`
+still supports a portable configuration elsewhere.
+
+The macOS adapter uses Apple's GameController API with an IOHID fallback for
+Xbox-compatible USB receivers, and CoreGraphics for desktop input. On first
+use, CouchPilot requests **System Settings → Privacy & Security →
+Accessibility** access and exits instead of pretending input was sent. Grant
+access, then start it again. The background service can be installed and
+removed with `install` and `uninstall`; it uses a per-user LaunchAgent.
+While running, a monochrome controller icon appears in the macOS menu bar. Its
+menu opens logs or the configuration folder and can exit CouchPilot cleanly.
+AppKit and GameController share one process: AppKit
+owns the main thread while the mapping engine samples background controller
+state on a worker.
+
+Controller haptics are currently implemented on Windows. macOS controllers
+work without rumble when their driver does not expose a compatible haptics API;
+`doctor` reports this as a skipped capability instead of a successful pulse.
+
+The script ad-hoc signs local builds by default. For a stable distributable
+identity, provide an installed signing identity:
+
+```sh
+CODESIGN_IDENTITY='Developer ID Application: Example (TEAMID)' ./scripts/build-macos.sh
+```
+
+The default deployment target is macOS 11.0. Override both the compiled binary
+and bundle metadata together with `MACOSX_DEPLOYMENT_TARGET` when needed.
 
 ## Contributing and license
 

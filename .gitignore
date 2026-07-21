@@ -6,8 +6,11 @@
 
 # Runtime state
 /logs/
+# Legacy local data; no longer read.
 /usage/
+/trace/
 *.pid
+*.pid.lock
 *.stop
 
 # Editor and operating-system files

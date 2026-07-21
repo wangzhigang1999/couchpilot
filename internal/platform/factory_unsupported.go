@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package platform
 
@@ -8,6 +8,10 @@ import (
 	"github.com/wangzhigang1999/couchpilot/internal/core"
 )
 
-func New(string, []core.AppProfile) (core.Gamepad, core.Desktop, error) {
-	return nil, nil, fmt.Errorf("this platform adapter has not been implemented yet")
+func NewGamepad() (core.Gamepad, error) {
+	return nil, fmt.Errorf("this platform gamepad adapter has not been implemented yet")
+}
+
+func NewDesktop(string, []core.AppProfile) (core.Desktop, error) {
+	return nil, fmt.Errorf("this platform desktop adapter has not been implemented yet")
 }

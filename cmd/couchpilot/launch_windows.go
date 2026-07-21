@@ -65,3 +65,5 @@ func configPathForExecutable(executable string) string {
 	// A portable first run creates its config beside the executable.
 	return candidates[0]
 }
+
+func redirectAppOutput(string, bool) error { return nil }

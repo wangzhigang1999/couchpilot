@@ -209,14 +209,6 @@ func (d *Desktop) Perform(action core.Action) error {
 		return tapHotkey(vkControl, uint16('K'))
 	case core.CodexTerminal:
 		return tapHotkey(vkControl, vkOEM3)
-	case core.ChromePreviousTab:
-		return tapHotkey(vkControl, vkShift, vkTab)
-	case core.ChromeNextTab:
-		return tapHotkey(vkControl, vkTab)
-	case core.ChromeAddressBar:
-		return tapHotkey(vkControl, uint16('L'))
-	case core.ChromeNewTab:
-		return tapHotkey(vkControl, uint16('T'))
 	default:
 		return fmt.Errorf("unsupported Windows action %q", action)
 	}
@@ -315,22 +307,35 @@ func tapKey(virtualKey uint16, duration time.Duration) error {
 }
 
 func tapHotkey(keys ...uint16) error {
+	return tapHotkeyWith(keyEvent, time.Sleep, keys...)
+}
+
+type keyEventPoster func(virtualKey uint16, down bool) error
+
+func tapHotkeyWith(post keyEventPoster, sleep func(time.Duration), keys ...uint16) (resultErr error) {
 	if len(keys) == 0 {
 		return nil
 	}
 	modifiers, key := keys[:len(keys)-1], keys[len(keys)-1]
+	pressed := make([]uint16, 0, len(modifiers))
+	defer func() {
+		for index := len(pressed) - 1; index >= 0; index-- {
+			if err := post(pressed[index], false); resultErr == nil && err != nil {
+				resultErr = err
+			}
+		}
+	}()
 	for _, modifier := range modifiers {
-		if err := keyEvent(modifier, true); err != nil {
+		if err := post(modifier, true); err != nil {
 			return err
 		}
+		pressed = append(pressed, modifier)
 	}
-	err := tapKey(key, 25*time.Millisecond)
-	for index := len(modifiers) - 1; index >= 0; index-- {
-		if releaseErr := keyEvent(modifiers[index], false); err == nil {
-			err = releaseErr
-		}
+	if err := post(key, true); err != nil {
+		return err
 	}
-	return err
+	sleep(25 * time.Millisecond)
+	return post(key, false)
 }
 
 func physicalKeyEvent(virtualKey uint16, down bool) error {
@@ -351,7 +356,7 @@ func physicalKeyEvent(virtualKey uint16, down bool) error {
 
 func virtualKey(name string) (uint16, error) {
 	switch strings.ToLower(name) {
-	case "right_alt", "alt_right":
+	case "platform_default", "right_alt", "alt_right":
 		return vkRightAlt, nil
 	case "left_alt", "alt_left":
 		return vkLeftAlt, nil
