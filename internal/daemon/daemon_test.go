@@ -31,6 +31,77 @@ func TestClaimPIDLifecycle(t *testing.T) {
 	}
 }
 
+func TestReservePIDDoesNotPublishUntilReady(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.pid")
+	claim, err := ReservePID(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer claim.Release()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("PID file was published before readiness: %v", err)
+	}
+	if err := claim.MarkReady(); err != nil {
+		t.Fatal(err)
+	}
+	if pid, running := Status(path); !running || pid != os.Getpid() {
+		t.Fatalf("published pid=%d running=%t", pid, running)
+	}
+}
+
+func TestStatusRejectsLivePIDWithoutRuntimeLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.pid")
+	if err := os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if pid, running := Status(path); running || pid != 0 {
+		t.Fatalf("unowned pid reported as CouchPilot: pid=%d running=%t", pid, running)
+	}
+}
+
+func TestRuntimeCleanupRequiresOwningTheKernelLock(t *testing.T) {
+	base := t.TempDir()
+	paths := RuntimePaths(filepath.Join(base, "config.json"))
+	claim, err := ReservePID(paths.PIDFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.StopFile, []byte("stop\n"), 0o644); err != nil {
+		claim.Release()
+		t.Fatal(err)
+	}
+	if cleaned, err := cleanupRuntimeFilesIfUnlocked(paths, 0); err != nil || cleaned {
+		claim.Release()
+		t.Fatalf("cleanup while owned: cleaned=%t err=%v", cleaned, err)
+	}
+	if _, err := os.Stat(paths.StopFile); err != nil {
+		claim.Release()
+		t.Fatalf("stop file removed while runtime lock was held: %v", err)
+	}
+	claim.Release()
+	if cleaned, err := cleanupRuntimeFilesIfUnlocked(paths, 0); err != nil || !cleaned {
+		t.Fatalf("cleanup after release: cleaned=%t err=%v", cleaned, err)
+	}
+	if _, err := os.Stat(paths.StopFile); !os.IsNotExist(err) {
+		t.Fatalf("stop file remains after cleanup: %v", err)
+	}
+}
+
+func TestRuntimeCleanupTreatsMissingDirectoryAsAlreadyClean(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "missing")
+	paths := RuntimePaths(filepath.Join(base, "config.json"))
+	if cleaned, err := cleanupRuntimeFilesIfUnlocked(paths, 0); err != nil || !cleaned {
+		t.Fatalf("cleaned=%t err=%v", cleaned, err)
+	}
+}
+
+func TestStopRequestPathIsGenerationScoped(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "couchpilot.stop")
+	if first, second := StopRequestPath(base, 41), StopRequestPath(base, 42); first == second {
+		t.Fatalf("stop request paths collided: %q", first)
+	}
+}
+
 func TestClaimPIDAtomicallyExcludesCanonicalAlias(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "app.pid")
@@ -156,12 +227,15 @@ func TestClaimPIDKernelLockIsReleasedAfterOwnerCrash(t *testing.T) {
 			_ = command.Wait()
 		}
 	})
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if _, err := os.Stat(ready); err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+			childExited = true
 			t.Fatalf("pid lock helper did not become ready: %s", childOutput.String())
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -183,19 +257,10 @@ func TestClaimPIDKernelLockIsReleasedAfterOwnerCrash(t *testing.T) {
 	release()
 }
 
-func TestRuntimePathsKeepUsageDataBesideConfig(t *testing.T) {
+func TestRuntimePathsKeepTraceBesideConfig(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "portable")
 	paths := RuntimePaths(filepath.Join(base, "config.json"))
-	if paths.UsageDirectory != filepath.Join(base, "usage") {
-		t.Fatalf("usage directory = %q", paths.UsageDirectory)
-	}
-	if paths.UsageSnapshotFile != filepath.Join(base, "usage", "usage-v1.snapshot.json") {
-		t.Fatalf("usage snapshot = %q", paths.UsageSnapshotFile)
-	}
-	if paths.UsageWALFile != filepath.Join(base, "usage", "usage-v1.wal.jsonl") {
-		t.Fatalf("usage WAL = %q", paths.UsageWALFile)
-	}
-	if paths.UsageReportFile != filepath.Join(base, "usage", "usage-v1-report.html") {
-		t.Fatalf("usage report = %q", paths.UsageReportFile)
+	if paths.TraceDirectory != filepath.Join(base, "trace") {
+		t.Fatalf("trace directory = %q", paths.TraceDirectory)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
@@ -30,7 +31,7 @@ type Settings struct {
 	HapticsEnabled            bool                         `json:"haptics_enabled"`
 	HapticStrength            float64                      `json:"haptic_strength"`
 	ExitHoldSeconds           float64                      `json:"exit_hold_seconds"`
-	LocalUsageStatsEnabled    bool                         `json:"local_usage_stats_enabled"`
+	LocalTraceEnabled         bool                         `json:"local_trace_enabled"`
 	AppProfiles               []core.AppProfile            `json:"app_profiles"`
 	Bindings                  map[string]map[string]string `json:"bindings,omitempty"`
 }
@@ -47,30 +48,20 @@ func Default() Settings {
 		BoostSpeedMultiplier:      1.85,
 		ScrollUnitsPerSecond:      1100,
 		VoiceMode:                 "tap",
-		VoiceKey:                  "right_alt",
+		VoiceKey:                  "platform_default",
 		VoiceSubmitTimeoutSeconds: 120,
 		HapticsEnabled:            true,
 		HapticStrength:            1.0,
 		ExitHoldSeconds:           1.5,
-		LocalUsageStatsEnabled:    true,
+		LocalTraceEnabled:         true,
 		AppProfiles:               defaultAppProfiles(),
 	}
 }
 
 func defaultAppProfiles() []core.AppProfile {
 	return []core.AppProfile{
-		{Name: "codex", ProcessNames: []string{"ChatGPT.exe"}, PathContains: []string{`\OpenAI.Codex_`}},
-		{Name: "chrome", ProcessNames: []string{"chrome.exe", "msedge.exe", "firefox.exe"}},
-		{Name: "raycast", ProcessNames: []string{"Raycast.exe"}},
-		{Name: "typeless", ProcessNames: []string{"Typeless.exe"}},
-		{Name: "notes", ProcessNames: []string{"Typora.exe", "Obsidian.exe"}},
-		{Name: "vscode", ProcessNames: []string{"Code.exe"}},
-		{Name: "jetbrains", ProcessNames: []string{"pycharm64.exe", "idea64.exe", "goland64.exe"}},
-		{Name: "chat", ProcessNames: []string{"QQ.exe", "Weixin.exe", "WeChat.exe"}},
-		{Name: "assistant", ProcessNames: []string{"Claude.exe", "CherryStudio.exe", "Cherry Studio.exe"}},
-		{Name: "media", ProcessNames: []string{"QQMusic.exe", "Spotify.exe", "vlc.exe"}},
-		{Name: "document", ProcessNames: []string{"Acrobat.exe", "WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE"}},
-		{Name: "terminal", ProcessNames: []string{"WindowsTerminal.exe"}},
+		{Name: "codex", ProcessNames: []string{"ChatGPT.exe", "ChatGPT", "Codex"}, PathContains: []string{`\OpenAI.Codex_`, "/Codex.app/", "/ChatGPT.app/"}},
+		{Name: "chrome", ProcessNames: []string{"chrome.exe", "msedge.exe", "firefox.exe", "Google Chrome", "Microsoft Edge", "Firefox"}},
 	}
 }
 
@@ -89,10 +80,133 @@ func Load(path string) (Settings, error) {
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return Settings{}, fmt.Errorf("decode config: %w", err)
 	}
+	// Preserve the legacy opt-out when loading a config written before the
+	// usage report was replaced by the smaller local trace file.
+	var compatibility struct {
+		LocalTraceEnabled      *bool `json:"local_trace_enabled"`
+		LocalUsageStatsEnabled *bool `json:"local_usage_stats_enabled"`
+	}
+	if err := json.Unmarshal(data, &compatibility); err != nil {
+		return Settings{}, fmt.Errorf("decode config compatibility fields: %w", err)
+	}
+	if compatibility.LocalTraceEnabled == nil && compatibility.LocalUsageStatsEnabled != nil {
+		settings.LocalTraceEnabled = *compatibility.LocalUsageStatsEnabled
+	}
+	migrateLegacyActionAliases(settings.Bindings)
+	migrateLegacyAppProfiles(&settings)
 	if settings.SchemaVersion == 0 {
 		settings.SchemaVersion = SchemaVersion
 	}
 	return settings, settings.Validate()
+}
+
+func migrateLegacyActionAliases(bindings map[string]map[string]string) {
+	aliases := map[string]string{
+		"chrome_previous_tab": "tab_previous",
+		"chrome_next_tab":     "tab_next",
+		"chrome_address_bar":  "focus_location",
+		"chrome_new_tab":      "tab_new",
+	}
+	for _, profileBindings := range bindings {
+		for gesture, action := range profileBindings {
+			if replacement, found := aliases[action]; found {
+				profileBindings[gesture] = replacement
+			}
+		}
+	}
+}
+
+func migrateLegacyAppProfiles(settings *Settings) {
+	current := defaultAppProfiles()
+	windows := legacyWindowsAppProfiles()
+	crossPlatform := legacyCrossPlatformAppProfiles()
+	profiles := make([]core.AppProfile, 0, len(settings.AppProfiles))
+	for _, profile := range settings.AppProfiles {
+		name := strings.ToLower(profile.Name)
+		if name == "codex" || name == "chrome" {
+			if profileAppearsIn(profile, windows) || profileAppearsIn(profile, crossPlatform) {
+				profiles = append(profiles, namedProfile(current, name))
+				continue
+			}
+		}
+		if isRetiredProfile(name) && !hasProfileBindings(settings.Bindings, name) &&
+			(profileAppearsIn(profile, windows) || profileAppearsIn(profile, crossPlatform)) {
+			continue
+		}
+		profiles = append(profiles, profile)
+	}
+	settings.AppProfiles = profiles
+}
+
+func isRetiredProfile(profile string) bool {
+	retired := map[string]struct{}{
+		"assistant": {}, "chat": {}, "document": {}, "jetbrains": {},
+		"media": {}, "notes": {}, "raycast": {}, "terminal": {},
+		"typeless": {}, "vscode": {},
+	}
+	_, found := retired[profile]
+	return found
+}
+
+func hasProfileBindings(bindings map[string]map[string]string, profile string) bool {
+	for name, values := range bindings {
+		if strings.EqualFold(name, profile) && len(values) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func profileAppearsIn(profile core.AppProfile, candidates []core.AppProfile) bool {
+	for _, candidate := range candidates {
+		if reflect.DeepEqual(profile, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func namedProfile(profiles []core.AppProfile, name string) core.AppProfile {
+	for _, profile := range profiles {
+		if strings.EqualFold(profile.Name, name) {
+			return profile
+		}
+	}
+	return core.AppProfile{}
+}
+
+func legacyWindowsAppProfiles() []core.AppProfile {
+	return []core.AppProfile{
+		{Name: "codex", ProcessNames: []string{"ChatGPT.exe"}, PathContains: []string{`\OpenAI.Codex_`}},
+		{Name: "chrome", ProcessNames: []string{"chrome.exe", "msedge.exe", "firefox.exe"}},
+		{Name: "raycast", ProcessNames: []string{"Raycast.exe"}},
+		{Name: "typeless", ProcessNames: []string{"Typeless.exe"}},
+		{Name: "notes", ProcessNames: []string{"Typora.exe", "Obsidian.exe"}},
+		{Name: "vscode", ProcessNames: []string{"Code.exe"}},
+		{Name: "jetbrains", ProcessNames: []string{"pycharm64.exe", "idea64.exe", "goland64.exe"}},
+		{Name: "chat", ProcessNames: []string{"QQ.exe", "Weixin.exe", "WeChat.exe"}},
+		{Name: "assistant", ProcessNames: []string{"Claude.exe", "CherryStudio.exe", "Cherry Studio.exe"}},
+		{Name: "media", ProcessNames: []string{"QQMusic.exe", "Spotify.exe", "vlc.exe"}},
+		{Name: "document", ProcessNames: []string{"Acrobat.exe", "WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE"}},
+		{Name: "terminal", ProcessNames: []string{"WindowsTerminal.exe"}},
+	}
+}
+
+func legacyCrossPlatformAppProfiles() []core.AppProfile {
+	return []core.AppProfile{
+		{Name: "codex", ProcessNames: []string{"ChatGPT.exe", "ChatGPT", "Codex"}, PathContains: []string{`\OpenAI.Codex_`, "/Codex.app/", "/ChatGPT.app/"}},
+		{Name: "chrome", ProcessNames: []string{"chrome.exe", "msedge.exe", "firefox.exe", "Google Chrome", "Microsoft Edge", "Firefox"}},
+		{Name: "raycast", ProcessNames: []string{"Raycast.exe", "Raycast"}},
+		{Name: "typeless", ProcessNames: []string{"Typeless.exe", "Typeless"}},
+		{Name: "notes", ProcessNames: []string{"Typora.exe", "Obsidian.exe", "Typora", "Obsidian"}},
+		{Name: "vscode", ProcessNames: []string{"Code.exe", "Code"}},
+		{Name: "jetbrains", ProcessNames: []string{"pycharm64.exe", "idea64.exe", "goland64.exe", "pycharm", "idea", "goland"}},
+		{Name: "chat", ProcessNames: []string{"QQ.exe", "Weixin.exe", "WeChat.exe", "QQ", "WeChat"}},
+		{Name: "assistant", ProcessNames: []string{"Claude.exe", "CherryStudio.exe", "Cherry Studio.exe", "Claude", "Cherry Studio"}},
+		{Name: "media", ProcessNames: []string{"QQMusic.exe", "Spotify.exe", "vlc.exe", "QQMusic", "Spotify", "VLC"}},
+		{Name: "document", ProcessNames: []string{"Acrobat.exe", "WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE", "Adobe Acrobat", "Microsoft Word", "Microsoft Excel", "Microsoft PowerPoint"}},
+		{Name: "terminal", ProcessNames: []string{"WindowsTerminal.exe", "Terminal", "iTerm2", "Warp", "ghostty"}},
+	}
 }
 
 func Save(path string, settings Settings) error {

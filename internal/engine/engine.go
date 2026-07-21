@@ -7,13 +7,12 @@ import (
 	"io"
 	"log"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/wangzhigang1999/couchpilot/internal/config"
 	"github.com/wangzhigang1999/couchpilot/internal/core"
-	"github.com/wangzhigang1999/couchpilot/internal/usage"
+	"github.com/wangzhigang1999/couchpilot/internal/trace"
 )
 
 var ErrExitRequested = errors.New("emergency exit requested")
@@ -24,16 +23,15 @@ const (
 )
 
 type Engine struct {
-	settings   config.Settings
-	gamepad    core.Gamepad
-	desktop    core.Desktop
-	clock      core.Clock
-	resolver   *Resolver
-	logger     *log.Logger
-	verbose    bool
-	usage      usage.Recorder
-	strategyID string
-	trace      traceState
+	settings       config.Settings
+	gamepad        core.Gamepad
+	desktop        core.Desktop
+	smoothScroller core.SmoothScroller
+	clock          core.Clock
+	resolver       *Resolver
+	logger         *log.Logger
+	verbose        bool
+	traceSink      trace.Sink
 
 	device               core.DeviceID
 	previousButtons      core.Button
@@ -57,46 +55,35 @@ type Engine struct {
 	repeatNext           time.Time
 	heldActions          map[core.Button]core.Action
 	scrollRemainder      float64
+	smoothScrollVelocity float64
+	smoothScrollActive   bool
 	moveRemainder        [2]float64
+	frameContextLoaded   bool
+	frameProfile         string
+	frameProcessName     string
 }
 
 func New(settings config.Settings, gamepad core.Gamepad, desktop core.Desktop, verbose bool, output io.Writer) *Engine {
 	if output == nil {
 		output = io.Discard
 	}
-	resolver := NewResolver(settings.Bindings)
-	return &Engine{
+	result := &Engine{
 		settings:    settings,
 		gamepad:     gamepad,
 		desktop:     desktop,
 		clock:       core.RealClock{},
-		resolver:    resolver,
+		resolver:    NewResolver(settings.Bindings),
 		logger:      log.New(output, "", log.LstdFlags),
 		verbose:     verbose,
 		heldActions: make(map[core.Button]core.Action),
-		strategyID:  strategyID(settings, resolver.BindingInventory()),
-		trace:       newTraceState(),
 	}
+	result.smoothScroller, _ = desktop.(core.SmoothScroller)
+	return result
 }
 
-// SetUsageRecorder attaches a non-blocking observation sink. It is intended to
-// be called during worker setup, before Run starts.
-func (e *Engine) SetUsageRecorder(recorder usage.Recorder) {
-	e.usage = recorder
-}
-
-func (e *Engine) BindingInventory() []usage.BindingDefinition {
-	return e.resolver.BindingInventory()
-}
-
-// StrategyRevision identifies the effective bindings and gesture semantics
-// that produced this engine's trace observations.
-func (e *Engine) StrategyRevision() string {
-	return e.strategyID
-}
-
-func (e *Engine) UsageControls() []string {
-	return append([]string(nil), usageControls...)
+// SetTraceSink attaches a non-owning diagnostic sink during worker setup.
+func (e *Engine) SetTraceSink(sink trace.Sink) {
+	e.traceSink = sink
 }
 
 func (e *Engine) Run(ctx context.Context) error {
@@ -127,6 +114,15 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 			e.device = device
 			e.logger.Printf("using controller %s", device)
+			if e.verbose {
+				if diagnostics, ok := e.gamepad.(core.GamepadDiagnostics); ok {
+					if detail, err := diagnostics.Diagnostic(device); err == nil {
+						e.logger.Printf("controller diagnostic: %s", detail)
+					} else {
+						e.logger.Printf("controller diagnostic unavailable: %v", err)
+					}
+				}
+			}
 			e.pulseHaptic(28000, 20000, 120*time.Millisecond)
 			e.updateRumble(frameStarted)
 		}
@@ -136,7 +132,6 @@ func (e *Engine) Run(ctx context.Context) error {
 		}
 		if !connected {
 			e.logger.Printf("controller disconnected; waiting for reconnect")
-			e.trace.lastAt = frameStarted
 			e.disconnect()
 			e.clock.Sleep(500 * time.Millisecond)
 			continue
@@ -156,13 +151,13 @@ func (e *Engine) Step(state core.State, dt float64, now time.Time) error {
 	// those errors, but keeping the state transition atomic also prevents a
 	// caller that inspects the failure from recording the same press twice.
 	defer func() { e.previousButtons = state.Buttons }()
-	e.trace.lastAt = now
+	e.frameContextLoaded = false
 	e.expireCompose(now)
 	leftTriggerWasActive := e.previousLeftTrigger
 	e.logEdges(state, now)
 	e.observeStickEdges(state, now)
 	if leftTriggerWasActive && state.LeftTrigger <= 0.08 && e.windowSwitching {
-		if err := e.finishWindowSwitch(now, "trigger_released", usage.OutcomeNone); err != nil {
+		if err := e.finishWindowSwitch(); err != nil {
 			return err
 		}
 	}
@@ -210,11 +205,8 @@ func (e *Engine) findDevice() (core.DeviceID, bool, error) {
 		return "", false, nil
 	}
 	if e.settings.ControllerIndex >= 0 {
-		suffix := ":" + strconv.Itoa(e.settings.ControllerIndex)
-		for _, device := range devices {
-			if strings.HasSuffix(string(device), suffix) {
-				return device, true, nil
-			}
+		if e.settings.ControllerIndex < len(devices) {
+			return devices[e.settings.ControllerIndex], true, nil
 		}
 		return "", false, nil
 	}
@@ -233,11 +225,9 @@ func (e *Engine) movePointer(state core.State, dt float64, now time.Time) error 
 	}
 	multiplier := 1.0
 	if state.LeftTrigger > 0.08 {
-		e.markPointerModifier("lt")
 		amount := math.Min(1, (state.LeftTrigger-0.08)/0.92)
 		multiplier = 1 - amount*(1-e.settings.PrecisionSpeedMultiplier)
 	} else if state.RightTrigger > 0.08 {
-		e.markPointerModifier("rt")
 		amount := math.Min(1, (state.RightTrigger-0.08)/0.92)
 		multiplier = 1 + amount*(e.settings.BoostSpeedMultiplier-1)
 	}
@@ -250,11 +240,14 @@ func (e *Engine) movePointer(state core.State, dt float64, now time.Time) error 
 	if dx == 0 && dy == 0 {
 		return nil
 	}
-	e.clearCompose("pointer_movement", now)
+	e.clearCompose("pointer_movement")
 	return e.desktop.MovePointer(dx, dy)
 }
 
 func (e *Engine) scroll(state core.State, dt float64) error {
+	if e.smoothScroller != nil {
+		return e.scrollSmooth(state.RightY, dt)
+	}
 	e.scrollRemainder += state.RightY * e.settings.ScrollUnitsPerSecond * dt
 	for math.Abs(e.scrollRemainder) >= 120 {
 		amount := 120
@@ -269,6 +262,37 @@ func (e *Engine) scroll(state core.State, dt float64) error {
 	return nil
 }
 
+func (e *Engine) scrollSmooth(axis, dt float64) error {
+	if dt < 0 {
+		dt = 0
+	}
+	targetVelocity := axis * e.settings.ScrollUnitsPerSecond
+	response := 24.0
+	if math.Abs(targetVelocity) < 1e-4 {
+		// A short decay gives the stick a trackpad-like release without the long
+		// momentum tail that would make precise UI scrolling hard to stop.
+		response = 10
+	}
+	alpha := 1 - math.Exp(-response*dt)
+	e.smoothScrollVelocity += (targetVelocity - e.smoothScrollVelocity) * alpha
+	if math.Abs(targetVelocity) < 1e-4 && math.Abs(e.smoothScrollVelocity) < 2 {
+		e.smoothScrollVelocity = 0
+	}
+	if e.smoothScrollVelocity == 0 {
+		if !e.smoothScrollActive {
+			return nil
+		}
+		e.smoothScrollActive = false
+		return e.smoothScroller.ScrollSmooth(0, core.SmoothScrollEnded)
+	}
+	phase := core.SmoothScrollChanged
+	if !e.smoothScrollActive {
+		e.smoothScrollActive = true
+		phase = core.SmoothScrollBegan
+	}
+	return e.smoothScroller.ScrollSmooth(e.smoothScrollVelocity*dt, phase)
+}
+
 var gestures = []struct {
 	button  core.Button
 	gesture string
@@ -278,14 +302,6 @@ var gestures = []struct {
 	{core.LeftShoulder, "lb"}, {core.RightShoulder, "rb"},
 	{core.LeftThumb, "l3"}, {core.RightThumb, "r3"},
 	{core.A, "a"}, {core.B, "b"}, {core.X, "x"}, {core.Y, "y"},
-}
-
-var usageControls = []string{
-	"a", "b", "back", "back+start",
-	"dpad_down", "dpad_left", "dpad_right", "dpad_up",
-	"l3", "lb", "left_stick", "lt",
-	"r3", "rb", "right_stick", "rt",
-	"start", "x", "y",
 }
 
 var unboundSystemButtons = []struct {
@@ -299,12 +315,14 @@ var unboundSystemButtons = []struct {
 func (e *Engine) buttons(state core.State, now time.Time) error {
 	pressed := core.Button(uint16(state.Buttons) &^ uint16(e.previousButtons))
 	released := core.Button(uint16(e.previousButtons) &^ uint16(state.Buttons))
-	e.finishButtonHolds(released, now, "released")
+	if e.verbose && (pressed != 0 || released != 0) {
+		e.logger.Printf("buttons: state=0x%04X pressed=0x%04X released=0x%04X", uint16(state.Buttons), uint16(pressed), uint16(released))
+	}
 	for _, item := range gestures {
 		if released&item.button == 0 {
 			continue
 		}
-		e.stopRepeat(item.button, now, "released")
+		e.stopRepeat(item.button)
 		if err := e.releaseHeldAction(item.button); err != nil {
 			return err
 		}
@@ -324,7 +342,6 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 	}
 	profile, foregroundApp := e.foregroundContext()
 	simultaneous := pressedButtonCount(pressed) > 1
-	e.startButtonHolds(pressed, now, profile, foregroundApp)
 	for _, item := range unboundSystemButtons {
 		if pressed&item.button == 0 {
 			continue
@@ -332,10 +349,9 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 		resolved := ResolvedBinding{
 			ActiveProfile: profile,
 			Gesture:       item.control,
-			Resolution:    usage.ResolutionUnbound,
+			Resolution:    BindingUnbound,
 		}
-		e.updateButtonHold(item.button, resolved)
-		e.recordResolved(now, item.control, resolved, usage.OutcomeNone, foregroundApp, state, simultaneous)
+		e.recordResolved(now, item.control, resolved, trace.NoOutcome, foregroundApp, state, simultaneous)
 	}
 	for _, item := range gestures {
 		if pressed&item.button == 0 {
@@ -353,50 +369,42 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 			gesture = "voice+b"
 			composeDelete = true
 		} else if composeActive && gesture != "y" {
-			e.clearCompose("other_control", now)
+			e.clearCompose("other_control")
 		}
 		baseGesture := gesture
 		leftActive := !composeSubmit && state.LeftTrigger > 0.08
 		rightActive := !composeSubmit && state.RightTrigger > 0.08
-		var leftCandidate, rightCandidate ResolvedBinding
-		selectedModifier := ""
 		if leftActive {
-			leftCandidate = e.resolver.ResolveDetailed(profile, "lt+"+baseGesture)
-			if leftCandidate.Resolution == usage.ResolutionBound {
+			leftCandidate := e.resolver.ResolveDetailed(profile, "lt+"+baseGesture)
+			if leftCandidate.Resolution == BindingBound {
 				gesture = leftCandidate.Gesture
-				selectedModifier = "lt"
 			}
 		}
 		if rightActive {
-			rightCandidate = e.resolver.ResolveDetailed(profile, "rt+"+baseGesture)
+			rightCandidate := e.resolver.ResolveDetailed(profile, "rt+"+baseGesture)
 			// Preserve the existing LT-first resolver behavior when both
 			// triggers are active, even when only the RT candidate is bound.
-			if !leftActive && rightCandidate.Resolution == usage.ResolutionBound {
+			if !leftActive && rightCandidate.Resolution == BindingBound {
 				gesture = rightCandidate.Gesture
-				selectedModifier = "rt"
 			}
 		}
 		resolved := e.resolver.ResolveDetailed(profile, gesture)
-		e.recordChordProbes(now, item.gesture, resolved, foregroundApp, state,
-			leftActive, rightActive, leftCandidate, rightCandidate, selectedModifier)
-		e.updateButtonHold(item.button, resolved)
-		if resolved.Resolution != usage.ResolutionBound {
-			e.recordResolved(now, item.gesture, resolved, usage.OutcomeNone, foregroundApp, state, simultaneous)
+		if resolved.Resolution != BindingBound {
+			e.recordResolved(now, item.gesture, resolved, trace.NoOutcome, foregroundApp, state, simultaneous)
 			if composeSubmit {
-				e.clearCompose("submit_unavailable", now)
+				e.clearCompose("submit_unavailable")
 			}
 			continue
 		}
 		action := resolved.Action
 		if composeDelete {
 			if err := e.desktop.Perform(action); err != nil {
-				e.recordResolved(now, item.gesture, resolved, usage.OutcomeFailure, foregroundApp, state, simultaneous)
-				e.clearComposeWithOutcome("delete_dispatch_failed", now, usage.OutcomeFailure)
+				e.recordResolved(now, item.gesture, resolved, trace.Failure, foregroundApp, state, simultaneous)
+				e.clearCompose("delete_dispatch_failed")
 				return fmt.Errorf("perform %s: %w", action, err)
 			}
-			e.recordResolved(now, item.gesture, resolved, usage.OutcomeSuccess, foregroundApp, state, simultaneous)
-			e.trace.compose.deletes++
-			e.startRepeat(item.button, item.gesture, resolved.Gesture, action, profile, foregroundApp, now)
+			e.recordResolved(now, item.gesture, resolved, trace.Success, foregroundApp, state, simultaneous)
+			e.startRepeat(item.button, action, now)
 			e.actionHaptic(action)
 			if e.verbose {
 				e.logger.Printf("%s/%s -> %s", profile, gesture, action)
@@ -405,30 +413,30 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 		}
 		if action == core.Voice {
 			if err := e.voicePressed(item.button); err != nil {
-				e.recordResolved(now, item.gesture, resolved, usage.OutcomeFailure, foregroundApp, state, simultaneous)
+				e.recordResolved(now, item.gesture, resolved, trace.Failure, foregroundApp, state, simultaneous)
 				if composeSubmit {
-					e.clearComposeWithOutcome("submit_dispatch_failed", now, usage.OutcomeFailure)
+					e.clearCompose("submit_dispatch_failed")
 				}
 				return err
 			}
-			e.recordResolved(now, item.gesture, resolved, usage.OutcomeSuccess, foregroundApp, state, simultaneous)
+			e.recordResolved(now, item.gesture, resolved, trace.Success, foregroundApp, state, simultaneous)
 			if composeSubmit {
-				e.clearComposeWithOutcome("submit_succeeded", now, usage.OutcomeSuccess)
+				e.clearCompose("submit_succeeded")
 			}
-			e.armCompose(profile, foregroundApp, now)
+			e.armCompose(profile, now)
 			continue
 		}
 		if down, up, held := heldActionPair(action); held {
 			if err := e.desktop.Perform(down); err != nil {
-				e.recordResolved(now, item.gesture, resolved, usage.OutcomeFailure, foregroundApp, state, simultaneous)
+				e.recordResolved(now, item.gesture, resolved, trace.Failure, foregroundApp, state, simultaneous)
 				if composeSubmit {
-					e.clearComposeWithOutcome("submit_dispatch_failed", now, usage.OutcomeFailure)
+					e.clearCompose("submit_dispatch_failed")
 				}
 				return fmt.Errorf("perform %s: %w", action, err)
 			}
-			e.recordResolved(now, item.gesture, resolved, usage.OutcomeSuccess, foregroundApp, state, simultaneous)
+			e.recordResolved(now, item.gesture, resolved, trace.Success, foregroundApp, state, simultaneous)
 			if composeSubmit {
-				e.clearComposeWithOutcome("submit_succeeded", now, usage.OutcomeSuccess)
+				e.clearCompose("submit_succeeded")
 			}
 			e.heldActions[item.button] = up
 			e.actionHaptic(action)
@@ -440,26 +448,24 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 			case core.WindowPrevious:
 				performedAction = core.WindowCyclePrevious
 				e.windowSwitching = true
-				e.startWindowTrace(now, profile, foregroundApp, action)
 			case core.WindowNext:
 				performedAction = core.WindowCycleNext
 				e.windowSwitching = true
-				e.startWindowTrace(now, profile, foregroundApp, action)
 			}
 		}
 		if err := e.desktop.Perform(performedAction); err != nil {
 			if e.windowSwitching {
-				_ = e.finishWindowSwitch(now, "cycle_failure", usage.OutcomeFailure)
+				_ = e.finishWindowSwitch()
 			}
-			e.recordResolved(now, item.gesture, resolved, usage.OutcomeFailure, foregroundApp, state, simultaneous)
+			e.recordResolved(now, item.gesture, resolved, trace.Failure, foregroundApp, state, simultaneous)
 			if composeSubmit {
-				e.clearComposeWithOutcome("submit_dispatch_failed", now, usage.OutcomeFailure)
+				e.clearCompose("submit_dispatch_failed")
 			}
 			return fmt.Errorf("perform %s: %w", action, err)
 		}
-		e.recordResolved(now, item.gesture, resolved, usage.OutcomeSuccess, foregroundApp, state, simultaneous)
+		e.recordResolved(now, item.gesture, resolved, trace.Success, foregroundApp, state, simultaneous)
 		if composeSubmit {
-			e.clearComposeWithOutcome("submit_succeeded", now, usage.OutcomeSuccess)
+			e.clearCompose("submit_succeeded")
 		}
 		e.actionHaptic(performedAction)
 		if e.verbose {
@@ -472,20 +478,13 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 	return nil
 }
 
-func (e *Engine) armCompose(profile, foregroundApp string, now time.Time) {
+func (e *Engine) armCompose(profile string, now time.Time) {
 	if _, found := e.resolver.Resolve(profile, "voice+a"); !found {
-		e.clearCompose("unsupported", now)
+		e.clearCompose("unsupported")
 		return
 	}
-	e.finishComposeTrace(now, "restarted", usage.OutcomeNone)
 	e.composeProfile = profile
 	e.composeUntil = now.Add(time.Duration(e.settings.VoiceSubmitTimeoutSeconds * float64(time.Second)))
-	e.trace.compose = composeTrace{
-		active:        true,
-		started:       now,
-		foregroundApp: foregroundApp,
-		activeProfile: profile,
-	}
 	if e.verbose {
 		e.logger.Printf("%s voice compose armed; A submits, B deletes", profile)
 	}
@@ -496,11 +495,11 @@ func (e *Engine) composeActive(profile string, now time.Time) bool {
 		return false
 	}
 	if profile != e.composeProfile {
-		e.clearCompose("profile_changed", now)
+		e.clearCompose("profile_changed")
 		return false
 	}
 	if !now.Before(e.composeUntil) {
-		e.clearCompose("timeout", now)
+		e.clearCompose("timeout")
 		return false
 	}
 	return true
@@ -508,40 +507,32 @@ func (e *Engine) composeActive(profile string, now time.Time) bool {
 
 func (e *Engine) expireCompose(now time.Time) {
 	if e.composeProfile != "" && !now.Before(e.composeUntil) {
-		e.clearCompose("timeout", now)
+		e.clearCompose("timeout")
 	}
 }
 
-func (e *Engine) clearCompose(reason string, now time.Time) {
-	e.clearComposeWithOutcome(reason, now, usage.OutcomeNone)
-}
-
-func (e *Engine) clearComposeWithOutcome(reason string, now time.Time, outcome usage.Outcome) {
+func (e *Engine) clearCompose(reason string) {
 	if e.composeProfile == "" {
 		return
 	}
 	if e.verbose && reason != "" {
 		e.logger.Printf("%s voice compose cleared: %s", e.composeProfile, reason)
 	}
-	e.finishRepeatTrace(now, reason, outcome)
-	e.finishComposeTrace(now, reason, outcome)
 	e.composeProfile = ""
 	e.composeUntil = time.Time{}
-	e.stopRepeat(0, now, reason)
+	e.stopRepeat(0)
 }
 
-func (e *Engine) startRepeat(button core.Button, physicalGesture, gesture string, action core.Action, profile, foregroundApp string, now time.Time) {
+func (e *Engine) startRepeat(button core.Button, action core.Action, now time.Time) {
 	e.repeatButton = button
 	e.repeatAction = action
 	e.repeatNext = now.Add(composeDeleteRepeatDelay)
-	e.startRepeatTrace(now, profile, foregroundApp, physicalGesture, gesture, action)
 }
 
-func (e *Engine) stopRepeat(button core.Button, now time.Time, reason string) {
+func (e *Engine) stopRepeat(button core.Button) {
 	if button != 0 && e.repeatButton != button {
 		return
 	}
-	e.finishRepeatTrace(now, reason, usage.OutcomeSuccess)
 	e.repeatButton = 0
 	e.repeatAction = ""
 	e.repeatNext = time.Time{}
@@ -551,17 +542,15 @@ func (e *Engine) repeatHeldAction(state core.State, now time.Time) error {
 	if e.repeatButton == 0 || state.Buttons&e.repeatButton == 0 || now.Before(e.repeatNext) {
 		return nil
 	}
-	profile, _ := e.desktop.ForegroundContext()
+	profile, _ := e.foregroundContext()
 	if profile != e.composeProfile {
-		e.clearCompose("profile_changed", now)
+		e.clearCompose("profile_changed")
 		return nil
 	}
 	if err := e.desktop.Perform(e.repeatAction); err != nil {
-		e.clearComposeWithOutcome("repeat_dispatch_failure", now, usage.OutcomeFailure)
+		e.clearCompose("repeat_dispatch_failure")
 		return fmt.Errorf("repeat %s: %w", e.repeatAction, err)
 	}
-	e.trace.repeat.count++
-	e.trace.compose.repeats++
 	e.repeatNext = now.Add(composeDeleteRepeatInterval)
 	return nil
 }
@@ -620,19 +609,14 @@ func (e *Engine) voiceReleased() error {
 	return nil
 }
 
-func (e *Engine) finishWindowSwitch(now time.Time, reason string, sessionOutcome usage.Outcome) error {
+func (e *Engine) finishWindowSwitch() error {
 	if !e.windowSwitching {
 		return nil
 	}
 	e.windowSwitching = false
 	if err := e.desktop.Perform(core.WindowCycleCommit); err != nil {
-		e.finishWindowTrace(now, reason, usage.OutcomeFailure)
 		return err
 	}
-	if sessionOutcome == usage.OutcomeNone {
-		sessionOutcome = usage.OutcomeSuccess
-	}
-	e.finishWindowTrace(now, reason, sessionOutcome)
 	e.actionHaptic(core.WindowCycleCommit)
 	return nil
 }
@@ -641,20 +625,10 @@ func (e *Engine) logEdges(state core.State, now time.Time) {
 	left := state.LeftTrigger > 0.08
 	right := state.RightTrigger > 0.08
 	if left && !e.previousLeftTrigger {
-		profile, foregroundApp := e.foregroundContext()
-		e.startTrigger("lt", now, profile, foregroundApp)
-		e.recordObserved(now, "lt", usage.GestureTriggerHold, "modifier")
-		e.recordLateModifierProbes("lt", state, now, profile, foregroundApp)
-	} else if !left && e.previousLeftTrigger {
-		e.finishTrigger("lt", now, "released")
+		e.recordObserved(now, "lt", "modifier")
 	}
 	if right && !e.previousRightTrigger {
-		profile, foregroundApp := e.foregroundContext()
-		e.startTrigger("rt", now, profile, foregroundApp)
-		e.recordObserved(now, "rt", usage.GestureTriggerHold, "modifier")
-		e.recordLateModifierProbes("rt", state, now, profile, foregroundApp)
-	} else if !right && e.previousRightTrigger {
-		e.finishTrigger("rt", now, "released")
+		e.recordObserved(now, "rt", "modifier")
 	}
 	if e.verbose && left != e.previousLeftTrigger {
 		e.logger.Printf("LT precision: %t", left)
@@ -670,7 +644,7 @@ func (e *Engine) observeStickEdges(state core.State, now time.Time) {
 	left := math.Hypot(state.LeftX, state.LeftY) >= 1e-4
 	right := math.Hypot(state.RightX, state.RightY) >= 1e-4
 	if left && !e.previousLeftStick {
-		e.recordObserved(now, "left_stick", usage.GestureAnalogActivation, "pointer")
+		e.recordObserved(now, "left_stick", "pointer")
 	}
 	if right && !e.previousRightStick {
 		axis := "mixed_axes"
@@ -679,38 +653,38 @@ func (e *Engine) observeStickEdges(state core.State, now time.Time) {
 		} else if math.Abs(state.RightY) < 1e-4 {
 			axis = "horizontal_only"
 		}
-		e.recordObserved(now, "right_stick", usage.GestureAnalogActivation, axis)
+		e.recordObserved(now, "right_stick", axis)
 	}
 	e.previousLeftStick = left
 	e.previousRightStick = right
 }
 
-func (e *Engine) activeProfile() string {
-	profile, _ := e.foregroundContext()
-	return profile
-}
-
 func (e *Engine) foregroundContext() (string, string) {
+	if e.frameContextLoaded {
+		return e.frameProfile, e.frameProcessName
+	}
 	profile, processName := e.desktop.ForegroundContext()
 	if profile == "" {
 		profile = "default"
 	}
+	e.frameContextLoaded = true
+	e.frameProfile = profile
+	e.frameProcessName = processName
 	return profile, processName
 }
 
-func (e *Engine) recordResolved(now time.Time, control string, resolved ResolvedBinding, outcome usage.Outcome, foregroundApp string, state core.State, simultaneous bool) {
-	e.emit(usage.Observation{
+func (e *Engine) recordResolved(now time.Time, control string, resolved ResolvedBinding, outcome trace.Outcome, foregroundApp string, state core.State, simultaneous bool) {
+	e.emit(trace.Fact{
 		At:              now,
-		Kind:            usage.EventInputAttempt,
+		Kind:            trace.InputAttempt,
 		ForegroundApp:   foregroundApp,
 		ActiveProfile:   resolved.ActiveProfile,
 		BindingProfile:  resolved.BindingProfile,
 		Control:         control,
 		PhysicalGesture: physicalGestureForAttempt(control, resolved, state),
 		Gesture:         resolved.Gesture,
-		GestureKind:     gestureKind(resolved.Gesture),
 		Action:          string(resolved.Action),
-		Resolution:      resolved.Resolution,
+		Resolution:      trace.Resolution(resolved.Resolution),
 		Outcome:         outcome,
 		Flags: stableFlags(
 			flagIf(state.LeftTrigger > 0.08, "lt_active"),
@@ -723,45 +697,41 @@ func (e *Engine) recordResolved(now time.Time, control string, resolved Resolved
 	})
 }
 
-func (e *Engine) recordObserved(now time.Time, control string, kind usage.GestureKind, flags string) {
-	if e.usage == nil {
+func (e *Engine) recordObserved(now time.Time, control, flags string) {
+	if e.traceSink == nil {
 		return
 	}
 	profile, foregroundApp := e.foregroundContext()
-	e.emit(usage.Observation{
+	e.emit(trace.Fact{
 		At:              now,
-		Kind:            usage.EventPhysicalActivation,
+		Kind:            trace.PhysicalActivation,
 		ForegroundApp:   foregroundApp,
 		ActiveProfile:   profile,
 		Control:         control,
 		PhysicalGesture: control,
 		Gesture:         control,
-		GestureKind:     kind,
-		Resolution:      usage.ResolutionObserved,
-		Outcome:         usage.OutcomeNone,
+		Resolution:      trace.Observed,
+		Outcome:         trace.NoOutcome,
 		Flags:           flags,
 	})
 }
 
 func (e *Engine) recordSystemExit(now time.Time) {
-	if e.usage == nil {
+	if e.traceSink == nil {
 		return
 	}
 	profile, foregroundApp := e.foregroundContext()
-	e.emit(usage.Observation{
+	e.emit(trace.Fact{
 		At:              now,
-		Kind:            usage.EventPhysicalActivation,
+		Kind:            trace.PhysicalActivation,
 		ForegroundApp:   foregroundApp,
 		ActiveProfile:   profile,
 		Control:         "back+start",
 		PhysicalGesture: "back+start",
 		Gesture:         "back+start",
-		GestureKind:     usage.GestureSystemHold,
 		Action:          "emergency_exit",
-		Resolution:      usage.ResolutionSystem,
-		Outcome:         usage.OutcomeSuccess,
-		DurationBucket:  durationBucket(now.Sub(e.exitComboStarted)),
-		Reason:          "threshold_reached",
+		Resolution:      trace.System,
+		Outcome:         trace.Success,
 	})
 }
 
@@ -776,6 +746,10 @@ func (e *Engine) updateRumble(now time.Time) {
 	if left == e.rumbleSentLeft && right == e.rumbleSentRight {
 		return
 	}
+	if capabilities, ok := e.gamepad.(core.GamepadCapabilities); ok && !capabilities.HapticsSupported(e.device) {
+		e.rumbleSentLeft, e.rumbleSentRight = left, right
+		return
+	}
 	if err := e.gamepad.Rumble(e.device, left, right); err == nil {
 		e.rumbleSentLeft, e.rumbleSentRight = left, right
 	}
@@ -787,8 +761,7 @@ func (e *Engine) actionHaptic(action core.Action) {
 		e.pulseHaptic(9000, 22000, 45*time.Millisecond)
 	case core.ArrowUp, core.ArrowDown, core.ArrowLeft, core.ArrowRight,
 		core.TabPrevious, core.TabNext, core.PageUp, core.PageDown,
-		core.CodexPreviousTask, core.CodexNextTask,
-		core.ChromePreviousTab, core.ChromeNextTab:
+		core.CodexPreviousTask, core.CodexNextTask:
 		e.pulseHaptic(12000, 26000, 60*time.Millisecond)
 	case core.WindowCyclePrevious, core.WindowCycleNext, core.WindowPrevious, core.WindowNext:
 		e.pulseHaptic(32000, 22000, 75*time.Millisecond)
@@ -817,15 +790,15 @@ func (e *Engine) pulseHaptic(left, right uint16, duration time.Duration) {
 }
 
 func (e *Engine) disconnect() {
-	now := e.trace.lastAt
-	if now.IsZero() {
-		now = e.clock.Now()
+	if e.smoothScrollActive && e.smoothScroller != nil {
+		_ = e.smoothScroller.ScrollSmooth(0, core.SmoothScrollEnded)
 	}
-	e.traceDisconnect(now)
+	e.smoothScrollActive = false
+	e.smoothScrollVelocity = 0
 	e.releaseAllHeldActions()
-	e.clearCompose("disconnect", now)
+	e.clearCompose("disconnect")
 	if e.windowSwitching {
-		_ = e.finishWindowSwitch(now, "disconnect", usage.OutcomeNone)
+		_ = e.finishWindowSwitch()
 	}
 	if e.voiceHeld != 0 {
 		_ = e.voiceReleased()

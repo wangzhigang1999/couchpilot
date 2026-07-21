@@ -1,6 +1,11 @@
 package core
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrHapticsUnsupported = errors.New("controller haptics are unsupported")
 
 type DeviceID string
 
@@ -17,8 +22,6 @@ const (
 	RightThumb
 	LeftShoulder
 	RightShoulder
-	_ // reserved XInput bit
-	_ // reserved XInput bit
 	A
 	B
 	X
@@ -40,6 +43,18 @@ type Gamepad interface {
 	Devices() ([]DeviceID, error)
 	Read(DeviceID, float64) (State, bool, error)
 	Rumble(DeviceID, uint16, uint16) error
+}
+
+// GamepadDiagnostics is an optional raw-input view used when calibrating a
+// platform driver. Implementations should not alter controller state.
+type GamepadDiagnostics interface {
+	Diagnostic(DeviceID) (string, error)
+}
+
+// GamepadCapabilities describes optional device features without forcing the
+// portable engine to probe them by deliberately failing an operation.
+type GamepadCapabilities interface {
+	HapticsSupported(DeviceID) bool
 }
 
 // AppProfile describes how a foreground application maps to a binding profile.
@@ -97,10 +112,6 @@ const (
 	CodexNextTask       Action = "codex_next_task"
 	CodexCommandMenu    Action = "codex_command_menu"
 	CodexTerminal       Action = "codex_terminal"
-	ChromePreviousTab   Action = "chrome_previous_tab"
-	ChromeNextTab       Action = "chrome_next_tab"
-	ChromeAddressBar    Action = "chrome_address_bar"
-	ChromeNewTab        Action = "chrome_new_tab"
 )
 
 var KnownActions = []Action{
@@ -111,7 +122,6 @@ var KnownActions = []Action{
 	MediaPreviousTrack, MediaNextTrack, MediaPlayPause, VolumeMute,
 	Voice, WindowPrevious, WindowNext,
 	CodexBack, CodexPreviousTask, CodexNextTask, CodexCommandMenu, CodexTerminal,
-	ChromePreviousTab, ChromeNextTab, ChromeAddressBar, ChromeNewTab,
 }
 
 func IsKnownAction(action Action) bool {
@@ -131,6 +141,26 @@ type Desktop interface {
 	// foreground executable's base name. It never returns the full process path
 	// or a window title.
 	ForegroundContext() (profile, processName string)
+}
+
+// Readiness is implemented by adapters that require an operating-system
+// permission before they can safely report actions as dispatched.
+type Readiness interface {
+	Ready() error
+}
+
+// SmoothScroller is an optional pixel-precision scroll path for platforms
+// that support continuous gestures. Scroll remains the portable wheel API.
+type SmoothScrollPhase uint8
+
+const (
+	SmoothScrollBegan   SmoothScrollPhase = 1
+	SmoothScrollChanged SmoothScrollPhase = 2
+	SmoothScrollEnded   SmoothScrollPhase = 4
+)
+
+type SmoothScroller interface {
+	ScrollSmooth(amount float64, phase SmoothScrollPhase) error
 }
 
 type Clock interface {

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,11 +17,11 @@ import (
 	"github.com/wangzhigang1999/couchpilot/internal/daemon"
 	"github.com/wangzhigang1999/couchpilot/internal/engine"
 	"github.com/wangzhigang1999/couchpilot/internal/platform"
+	"github.com/wangzhigang1999/couchpilot/internal/trace"
 	"github.com/wangzhigang1999/couchpilot/internal/tray"
-	usagepkg "github.com/wangzhigang1999/couchpilot/internal/usage"
 )
 
-const usage = `CouchPilot
+const helpText = `CouchPilot
 
 Usage:
   couchpilot [run] [--config config.json] [--verbose]
@@ -32,8 +31,8 @@ Usage:
   couchpilot install [--config config.json] [--verbose]
   couchpilot uninstall [--config config.json]
   couchpilot doctor [--config config.json]
+  couchpilot inspect [--config config.json]
   couchpilot profile [--config config.json]
-  couchpilot usage [--config config.json]
   couchpilot actions
 `
 
@@ -42,6 +41,7 @@ type options struct {
 	pidFile    string
 	stopFile   string
 	verbose    bool
+	appLaunch  bool
 }
 
 func main() {
@@ -52,13 +52,13 @@ func main() {
 }
 
 func execute(args []string) error {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(helpText)
+		return nil
+	}
 	command := "run"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		command, args = args[0], args[1:]
-	}
-	if command == "help" || command == "--help" || command == "-h" {
-		fmt.Print(usage)
-		return nil
 	}
 	if command == "actions" {
 		for _, action := range core.KnownActions {
@@ -115,6 +115,13 @@ func execute(args []string) error {
 		}
 		return nil
 	case "install":
+		settings, err := config.Load(options.configPath)
+		if err != nil {
+			return err
+		}
+		if _, err := newReadyDesktop(settings); err != nil {
+			return err
+		}
 		executable, err := os.Executable()
 		if err != nil {
 			return err
@@ -135,13 +142,61 @@ func execute(args []string) error {
 		return nil
 	case "doctor":
 		return doctor(options.configPath)
+	case "inspect":
+		return inspect(options.configPath)
 	case "profile":
 		return showProfile(options.configPath)
-	case "usage":
-		return showUsage(options.configPath)
 	default:
-		return fmt.Errorf("unknown command %q\n\n%s", command, usage)
+		return fmt.Errorf("unknown command %q\n\n%s", command, helpText)
 	}
+}
+
+func inspect(configPath string) error {
+	settings, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+	gamepad, err := platform.NewGamepad()
+	if err != nil {
+		return err
+	}
+	devices, err := gamepad.Devices()
+	if err != nil {
+		return err
+	}
+	device, found := chooseDevice(settings, devices)
+	if !found {
+		return errors.New("configured controller is not connected")
+	}
+	diagnostics, ok := gamepad.(core.GamepadDiagnostics)
+	if !ok {
+		return errors.New("raw controller diagnostics are not available on this platform")
+	}
+	fmt.Printf("inspecting %s for 20 seconds; press A, B, X, Y, LB, RB, Back, Start and D-pad in order\n", device)
+	deadline := time.Now().Add(20 * time.Second)
+	previous := ""
+	for time.Now().Before(deadline) {
+		raw, err := diagnostics.Diagnostic(device)
+		if err != nil {
+			return err
+		}
+		state, connected, err := gamepad.Read(device, settings.Deadzone)
+		if err != nil {
+			return err
+		}
+		if !connected {
+			return errors.New("controller disconnected during inspect")
+		}
+		snapshot := fmt.Sprintf("raw=[%s] mapped=0x%04X LT=%.2f RT=%.2f LX=%.2f LY=%.2f RX=%.2f RY=%.2f",
+			raw, uint16(state.Buttons), state.LeftTrigger, state.RightTrigger,
+			state.LeftX, state.LeftY, state.RightX, state.RightY)
+		if snapshot != previous {
+			fmt.Println(snapshot)
+			previous = snapshot
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+	return nil
 }
 
 func parseOptions(command string, args []string) (options, error) {
@@ -152,6 +207,7 @@ func parseOptions(command string, args []string) (options, error) {
 	set.StringVar(&result.pidFile, "pid-file", "", "internal background process pid file")
 	set.StringVar(&result.stopFile, "stop-file", "", "internal background process stop file")
 	set.BoolVar(&result.verbose, "verbose", false, "log input actions")
+	set.BoolVar(&result.appLaunch, "app-launch", false, "internal application-bundle launch mode")
 	if err := set.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -162,71 +218,72 @@ func parseOptions(command string, args []string) (options, error) {
 }
 
 func run(options options) error {
+	if err := redirectAppOutput(options.configPath, options.appLaunch); err != nil {
+		return err
+	}
 	settings, err := config.Load(options.configPath)
 	if err != nil {
 		return err
 	}
-	releasePID, err := daemon.ClaimPID(options.pidFile)
+	pidClaim, err := daemon.ReservePID(options.pidFile)
 	if err != nil {
 		return err
 	}
-	defer releasePID()
-	gamepad, desktop, err := platform.New(settings.VoiceKey, settings.AppProfiles)
+	defer pidClaim.Release()
+	gamepad, err := platform.NewGamepad()
+	if err != nil {
+		return err
+	}
+	desktop, err := newReadyDesktop(settings)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if options.stopFile != "" {
-		defer os.Remove(options.stopFile)
-		go watchStopFile(ctx, options.stopFile, cancel)
+		_ = os.Remove(options.stopFile)
+		stopRequest := daemon.StopRequestPath(options.stopFile, os.Getpid())
+		_ = os.Remove(stopRequest)
+		defer os.Remove(stopRequest)
+		go watchStopFile(ctx, stopRequest, cancel)
 	}
 	paths := daemon.RuntimePaths(options.configPath)
 	controller := engine.New(settings, gamepad, desktop, options.verbose, os.Stdout)
-	var usageRecorder *usagepkg.FileRecorder
-	usageReportPath := ""
-	if settings.LocalUsageStatsEnabled {
-		usageRecorder, err = usagepkg.Open(usagepkg.Options{
-			Directory:  paths.UsageDirectory,
-			Inventory:  controller.BindingInventory(),
-			StrategyID: controller.StrategyRevision(),
-			Controls:   controller.UsageControls(),
+	var traceRecorder *trace.Recorder
+	if settings.LocalTraceEnabled {
+		traceRecorder, err = trace.Open(trace.Options{
+			Directory: paths.TraceDirectory,
 			OnError: func(err error) {
-				fmt.Fprintln(os.Stderr, "local usage stats:", err)
+				fmt.Fprintln(os.Stderr, "local trace:", err)
 			},
 		})
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "local usage stats disabled:", err)
-			usageRecorder = nil
+			fmt.Fprintln(os.Stderr, "local trace disabled:", err)
+			traceRecorder = nil
 		} else {
-			controller.SetUsageRecorder(usageRecorder)
-			usageReportPath = paths.UsageReportFile
-			fmt.Printf("local usage stats: %s\n", paths.UsageSnapshotFile)
+			controller.SetTraceSink(traceRecorder)
+			fmt.Printf("local trace: %s\n", trace.Path(paths.TraceDirectory))
 		}
 	}
-	// Keep an existing report reachable even when new observations are disabled
-	// (or a recorder could not be opened). Disabling collection never deletes
-	// the user's historical local report.
-	if usageReportPath == "" {
-		if _, statErr := os.Stat(paths.UsageReportFile); statErr == nil {
-			usageReportPath = paths.UsageReportFile
-		}
+	if traceRecorder != nil {
+		defer func() {
+			if err := traceRecorder.Close(); err != nil {
+				fmt.Fprintln(os.Stderr, "close local trace:", err)
+			}
+		}()
 	}
-	trayDone, err := tray.Start(ctx, cancel, paths.LogFile, options.configPath, usageReportPath)
+	application, err := tray.New(cancel, tray.Options{
+		LogPath:    paths.LogFile,
+		ConfigPath: options.configPath,
+	})
 	if err != nil {
-		if usageRecorder != nil {
-			_ = usageRecorder.Close()
-		}
-		return fmt.Errorf("start system tray: %w", err)
+		return fmt.Errorf("create system tray: %w", err)
 	}
-	runErr := controller.Run(ctx)
-	if usageRecorder != nil {
-		if err := usageRecorder.Close(); err != nil {
-			fmt.Fprintln(os.Stderr, "close local usage stats:", err)
-		}
+	defer application.Close()
+	if err := pidClaim.MarkReady(); err != nil {
+		return fmt.Errorf("publish runtime readiness: %w", err)
 	}
-	cancel()
-	trayErr := <-trayDone
+	runErr, trayErr := runApplication(ctx, cancel, application, controller.Run)
 	if errors.Is(runErr, engine.ErrExitRequested) {
 		fmt.Println("emergency exit")
 		runErr = nil
@@ -240,35 +297,21 @@ func run(options options) error {
 	return nil
 }
 
-func showUsage(configPath string) error {
-	settings, err := config.Load(configPath)
-	if err != nil {
-		return err
-	}
-	paths := daemon.RuntimePaths(configPath)
-	state := "已开启"
-	if !settings.LocalUsageStatsEnabled {
-		state = "已关闭"
-	}
-	fmt.Printf("本地键位策略记录：%s\n", state)
-	summary, err := usagepkg.ReadSummary(paths.UsageDirectory)
-	if errors.Is(err, usagepkg.ErrNoUsageData) {
-		fmt.Println("尚无按键记录。启动 CouchPilot 并使用手柄后再查看。")
-		fmt.Printf("记录目录：%s\n", paths.UsageDirectory)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("读取本地按键报告: %w", err)
-	}
-	fmt.Println()
-	fmt.Println("用途：用真实的按键、组合、App 场景和粗粒度 tracing 优化键位策略。")
-	fmt.Println("口径：“派发成功/派发失败”只表示系统动作是否成功发出，不代表用户意图是否达成。")
-	fmt.Println()
-	fmt.Print(usagepkg.FormatText(summary))
-	fmt.Printf("\nHTML 报告：%s\n", paths.UsageReportFile)
-	fmt.Printf("聚合快照：%s\n", paths.UsageSnapshotFile)
-	fmt.Printf("崩溃恢复日志：%s\n", paths.UsageWALFile)
-	return nil
+func runApplication(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	application tray.Application,
+	worker func(context.Context) error,
+) (workerErr, applicationErr error) {
+	workerDone := make(chan error, 1)
+	go func() {
+		workerDone <- worker(ctx)
+		cancel()
+	}()
+	applicationErr = application.Run(ctx)
+	cancel()
+	workerErr = <-workerDone
+	return workerErr, applicationErr
 }
 
 func showProfile(configPath string) error {
@@ -276,7 +319,7 @@ func showProfile(configPath string) error {
 	if err != nil {
 		return err
 	}
-	_, desktop, err := platform.New(settings.VoiceKey, settings.AppProfiles)
+	desktop, err := platform.NewDesktop(settings.VoiceKey, settings.AppProfiles)
 	if err != nil {
 		return err
 	}
@@ -306,7 +349,7 @@ func doctor(configPath string) error {
 	if err != nil {
 		return err
 	}
-	gamepad, _, err := platform.New(settings.VoiceKey, settings.AppProfiles)
+	gamepad, err := platform.NewGamepad()
 	if err != nil {
 		return err
 	}
@@ -328,13 +371,38 @@ func doctor(configPath string) error {
 	}
 	fmt.Printf("%s ready; packet=%d buttons=0x%04X LT=%.2f RT=%.2f\n",
 		device, state.PacketNumber, uint16(state.Buttons), state.LeftTrigger, state.RightTrigger)
-	if err := gamepad.Rumble(device, 36000, 26000); err != nil {
-		return err
+	hapticsSupported := true
+	if capabilities, ok := gamepad.(core.GamepadCapabilities); ok {
+		hapticsSupported = capabilities.HapticsSupported(device)
 	}
-	time.Sleep(180 * time.Millisecond)
-	_ = gamepad.Rumble(device, 0, 0)
-	fmt.Println("vibration test sent")
+	if hapticsSupported {
+		if err := gamepad.Rumble(device, 36000, 26000); err != nil {
+			return err
+		}
+		time.Sleep(180 * time.Millisecond)
+		_ = gamepad.Rumble(device, 0, 0)
+		fmt.Println("controller haptics: test pulse sent")
+	} else {
+		fmt.Println("controller haptics: unsupported (test skipped)")
+	}
+	if _, err := newReadyDesktop(settings); err != nil {
+		return fmt.Errorf("desktop automation: %w", err)
+	}
+	fmt.Println("desktop automation: ready")
 	return nil
+}
+
+func newReadyDesktop(settings config.Settings) (core.Desktop, error) {
+	desktop, err := platform.NewDesktop(settings.VoiceKey, settings.AppProfiles)
+	if err != nil {
+		return nil, err
+	}
+	if readiness, ok := desktop.(core.Readiness); ok {
+		if err := readiness.Ready(); err != nil {
+			return nil, fmt.Errorf("desktop adapter is not ready: %w", err)
+		}
+	}
+	return desktop, nil
 }
 
 func chooseDevice(settings config.Settings, devices []core.DeviceID) (core.DeviceID, bool) {
@@ -347,11 +415,8 @@ func chooseDevice(settings config.Settings, devices []core.DeviceID) (core.Devic
 		return "", false
 	}
 	if settings.ControllerIndex >= 0 {
-		suffix := ":" + strconv.Itoa(settings.ControllerIndex)
-		for _, device := range devices {
-			if strings.HasSuffix(string(device), suffix) {
-				return device, true
-			}
+		if settings.ControllerIndex < len(devices) {
+			return devices[settings.ControllerIndex], true
 		}
 		return "", false
 	}
