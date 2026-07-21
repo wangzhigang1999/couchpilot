@@ -19,6 +19,7 @@ import (
 	"github.com/wangzhigang1999/couchpilot/internal/engine"
 	"github.com/wangzhigang1999/couchpilot/internal/platform"
 	"github.com/wangzhigang1999/couchpilot/internal/tray"
+	usagepkg "github.com/wangzhigang1999/couchpilot/internal/usage"
 )
 
 const usage = `CouchPilot
@@ -32,6 +33,7 @@ Usage:
   couchpilot uninstall [--config config.json]
   couchpilot doctor [--config config.json]
   couchpilot profile [--config config.json]
+  couchpilot usage [--config config.json]
   couchpilot actions
 `
 
@@ -135,6 +137,8 @@ func execute(args []string) error {
 		return doctor(options.configPath)
 	case "profile":
 		return showProfile(options.configPath)
+	case "usage":
+		return showUsage(options.configPath)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", command, usage)
 	}
@@ -178,12 +182,49 @@ func run(options options) error {
 		go watchStopFile(ctx, options.stopFile, cancel)
 	}
 	paths := daemon.RuntimePaths(options.configPath)
-	trayDone, err := tray.Start(ctx, cancel, paths.LogFile, options.configPath)
+	controller := engine.New(settings, gamepad, desktop, options.verbose, os.Stdout)
+	var usageRecorder *usagepkg.FileRecorder
+	usageReportPath := ""
+	if settings.LocalUsageStatsEnabled {
+		usageRecorder, err = usagepkg.Open(usagepkg.Options{
+			Directory:  paths.UsageDirectory,
+			Inventory:  controller.BindingInventory(),
+			StrategyID: controller.StrategyRevision(),
+			Controls:   controller.UsageControls(),
+			OnError: func(err error) {
+				fmt.Fprintln(os.Stderr, "local usage stats:", err)
+			},
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "local usage stats disabled:", err)
+			usageRecorder = nil
+		} else {
+			controller.SetUsageRecorder(usageRecorder)
+			usageReportPath = paths.UsageReportFile
+			fmt.Printf("local usage stats: %s\n", paths.UsageSnapshotFile)
+		}
+	}
+	// Keep an existing report reachable even when new observations are disabled
+	// (or a recorder could not be opened). Disabling collection never deletes
+	// the user's historical local report.
+	if usageReportPath == "" {
+		if _, statErr := os.Stat(paths.UsageReportFile); statErr == nil {
+			usageReportPath = paths.UsageReportFile
+		}
+	}
+	trayDone, err := tray.Start(ctx, cancel, paths.LogFile, options.configPath, usageReportPath)
 	if err != nil {
+		if usageRecorder != nil {
+			_ = usageRecorder.Close()
+		}
 		return fmt.Errorf("start system tray: %w", err)
 	}
-	controller := engine.New(settings, gamepad, desktop, options.verbose, os.Stdout)
 	runErr := controller.Run(ctx)
+	if usageRecorder != nil {
+		if err := usageRecorder.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "close local usage stats:", err)
+		}
+	}
 	cancel()
 	trayErr := <-trayDone
 	if errors.Is(runErr, engine.ErrExitRequested) {
@@ -199,6 +240,37 @@ func run(options options) error {
 	return nil
 }
 
+func showUsage(configPath string) error {
+	settings, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+	paths := daemon.RuntimePaths(configPath)
+	state := "已开启"
+	if !settings.LocalUsageStatsEnabled {
+		state = "已关闭"
+	}
+	fmt.Printf("本地键位策略记录：%s\n", state)
+	summary, err := usagepkg.ReadSummary(paths.UsageDirectory)
+	if errors.Is(err, usagepkg.ErrNoUsageData) {
+		fmt.Println("尚无按键记录。启动 CouchPilot 并使用手柄后再查看。")
+		fmt.Printf("记录目录：%s\n", paths.UsageDirectory)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("读取本地按键报告: %w", err)
+	}
+	fmt.Println()
+	fmt.Println("用途：用真实的按键、组合、App 场景和粗粒度 tracing 优化键位策略。")
+	fmt.Println("口径：“派发成功/派发失败”只表示系统动作是否成功发出，不代表用户意图是否达成。")
+	fmt.Println()
+	fmt.Print(usagepkg.FormatText(summary))
+	fmt.Printf("\nHTML 报告：%s\n", paths.UsageReportFile)
+	fmt.Printf("聚合快照：%s\n", paths.UsageSnapshotFile)
+	fmt.Printf("崩溃恢复日志：%s\n", paths.UsageWALFile)
+	return nil
+}
+
 func showProfile(configPath string) error {
 	settings, err := config.Load(configPath)
 	if err != nil {
@@ -208,7 +280,8 @@ func showProfile(configPath string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(desktop.ForegroundProfile())
+	profile, _ := desktop.ForegroundContext()
+	fmt.Println(profile)
 	return nil
 }
 

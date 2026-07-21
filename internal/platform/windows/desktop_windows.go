@@ -255,12 +255,12 @@ func (d *Desktop) commitWindowSwitch() error {
 	return keyEvent(vkAlt, false)
 }
 
-func (d *Desktop) ForegroundProfile() string {
+func (d *Desktop) ForegroundContext() (string, string) {
 	path, err := foregroundProcessPath()
 	if err != nil {
-		return "default"
+		return "default", ""
 	}
-	return matchProfile(path, d.appProfiles)
+	return matchProfile(path, d.appProfiles), processNameFromPath(path)
 }
 
 func (d *Desktop) click(right bool) error {
@@ -388,10 +388,7 @@ func foregroundProcessPath() (string, error) {
 
 func matchProfile(path string, profiles []core.AppProfile) string {
 	normalized := strings.ToLower(strings.ReplaceAll(path, "/", `\`))
-	processName := normalized
-	if index := strings.LastIndex(normalized, `\`); index >= 0 {
-		processName = normalized[index+1:]
-	}
+	processName := strings.ToLower(processNameFromPath(path))
 	for _, profile := range profiles {
 		if !matchesAny(processName, profile.ProcessNames, func(value, candidate string) bool {
 			return value == strings.ToLower(candidate)
@@ -406,6 +403,14 @@ func matchProfile(path string, profiles []core.AppProfile) string {
 		return profile.Name
 	}
 	return "default"
+}
+
+func processNameFromPath(path string) string {
+	normalized := strings.ReplaceAll(path, "/", `\`)
+	if index := strings.LastIndex(normalized, `\`); index >= 0 {
+		return normalized[index+1:]
+	}
+	return normalized
 }
 
 func matchesAny(value string, candidates []string, match func(string, string) bool) bool {

@@ -30,6 +30,7 @@ type Settings struct {
 	HapticsEnabled            bool                         `json:"haptics_enabled"`
 	HapticStrength            float64                      `json:"haptic_strength"`
 	ExitHoldSeconds           float64                      `json:"exit_hold_seconds"`
+	LocalUsageStatsEnabled    bool                         `json:"local_usage_stats_enabled"`
 	AppProfiles               []core.AppProfile            `json:"app_profiles"`
 	Bindings                  map[string]map[string]string `json:"bindings,omitempty"`
 }
@@ -51,6 +52,7 @@ func Default() Settings {
 		HapticsEnabled:            true,
 		HapticStrength:            1.0,
 		ExitHoldSeconds:           1.5,
+		LocalUsageStatsEnabled:    true,
 		AppProfiles:               defaultAppProfiles(),
 	}
 }

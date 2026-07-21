@@ -1,11 +1,15 @@
 package engine
 
 import (
+	"errors"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/wangzhigang1999/couchpilot/internal/config"
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/usage"
 )
 
 type fakeGamepad struct {
@@ -24,9 +28,12 @@ func (f fakeGamepad) Rumble(_ core.DeviceID, left, right uint16) error {
 }
 
 type fakeDesktop struct {
-	profile string
-	actions []core.Action
-	moves   [][2]int
+	profile      string
+	processName  string
+	actions      []core.Action
+	moves        [][2]int
+	performError error
+	performHook  func(core.Action, int) error
 }
 
 func (f *fakeDesktop) MovePointer(x, y int) error {
@@ -36,9 +43,112 @@ func (f *fakeDesktop) MovePointer(x, y int) error {
 func (f *fakeDesktop) Scroll(int) error { return nil }
 func (f *fakeDesktop) Perform(action core.Action) error {
 	f.actions = append(f.actions, action)
-	return nil
+	if f.performHook != nil {
+		if err := f.performHook(action, len(f.actions)); err != nil {
+			return err
+		}
+	}
+	return f.performError
 }
-func (f *fakeDesktop) ForegroundProfile() string { return f.profile }
+func (f *fakeDesktop) ForegroundContext() (string, string) { return f.profile, f.processName }
+
+type fakeUsageRecorder struct {
+	// observations preserves the pre-tracing canonical view used by the
+	// original behavior tests. allObservations also includes diagnostic facts.
+	observations    []usage.Observation
+	allObservations []usage.Observation
+}
+
+func (f *fakeUsageRecorder) Record(observation usage.Observation) {
+	f.allObservations = append(f.allObservations, observation)
+	if observation.Kind == usage.EventInputAttempt || observation.Kind == usage.EventPhysicalActivation || observation.Kind == usage.EventLegacy {
+		f.observations = append(f.observations, observation)
+	}
+}
+
+func (*fakeUsageRecorder) Close() error { return nil }
+
+func (f *fakeUsageRecorder) events(kind usage.EventKind) []usage.Observation {
+	var result []usage.Observation
+	for _, observation := range f.allObservations {
+		if observation.Kind == kind {
+			result = append(result, observation)
+		}
+	}
+	return result
+}
+
+func TestResolveDetailedReportsBindingProvenance(t *testing.T) {
+	resolver := NewResolver(map[string]map[string]string{
+		"chrome": {
+			"a": "",
+		},
+	})
+	tests := []struct {
+		name           string
+		profile        string
+		gesture        string
+		activeProfile  string
+		bindingProfile string
+		action         core.Action
+		resolution     usage.Resolution
+	}{
+		{"active profile", "chrome", "rb", "chrome", "chrome", core.TabNext, usage.ResolutionBound},
+		{"default fallback", "chrome", "dpad_up", "chrome", "default", core.ArrowUp, usage.ResolutionBound},
+		{"explicitly disabled", "chrome", "a", "chrome", "chrome", "", usage.ResolutionDisabled},
+		{"unbound", "chrome", "start", "chrome", "", "", usage.ResolutionUnbound},
+		{"empty profile normalizes", "", "a", "default", "default", core.ClickLeft, usage.ResolutionBound},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := resolver.ResolveDetailed(test.profile, test.gesture)
+			if got.ActiveProfile != test.activeProfile || got.BindingProfile != test.bindingProfile ||
+				got.Gesture != test.gesture || got.Action != test.action || got.Resolution != test.resolution {
+				t.Fatalf("resolution = %+v", got)
+			}
+		})
+	}
+	if action, found := resolver.Resolve("chrome", "a"); found || action != "" {
+		t.Fatalf("Resolve compatibility lost disabled semantics: action=%q found=%t", action, found)
+	}
+}
+
+func TestBindingInventoryAndUsageControlsAreStable(t *testing.T) {
+	settings := config.Default()
+	settings.Bindings = map[string]map[string]string{
+		"chrome": {"a": ""},
+		"custom": {"x": string(core.Escape)},
+	}
+	controller := New(settings, fakeGamepad{}, &fakeDesktop{}, false, nil)
+	inventory := controller.BindingInventory()
+	keys := make([]string, 0, len(inventory))
+	disabledFound := false
+	for _, definition := range inventory {
+		keys = append(keys, definition.Profile+"\x00"+definition.Gesture+"\x00"+definition.Action)
+		if definition.Profile == "chrome" && definition.Gesture == "a" {
+			disabledFound = definition.Resolution == usage.ResolutionDisabled && definition.Action == ""
+		}
+	}
+	sortedKeys := append([]string(nil), keys...)
+	sort.Strings(sortedKeys)
+	if !reflect.DeepEqual(keys, sortedKeys) {
+		t.Fatal("binding inventory is not sorted")
+	}
+	if !disabledFound {
+		t.Fatal("disabled override missing from binding inventory")
+	}
+
+	controls := controller.UsageControls()
+	sortedControls := append([]string(nil), controls...)
+	sort.Strings(sortedControls)
+	if !reflect.DeepEqual(controls, sortedControls) {
+		t.Fatalf("usage controls are not sorted: %v", controls)
+	}
+	controls[0] = "mutated"
+	if controller.UsageControls()[0] == "mutated" {
+		t.Fatal("UsageControls returned mutable engine state")
+	}
+}
 
 func TestLTShouldersOverrideChromeTabs(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
@@ -490,5 +600,305 @@ func TestHapticsCanBeDisabled(t *testing.T) {
 	}
 	if len(rumbles) != 0 {
 		t.Fatalf("expected no haptics, got %v", rumbles)
+	}
+}
+
+func TestUsageRecordsDefaultFallbackWithStepTimestamp(t *testing.T) {
+	desktop := &fakeDesktop{profile: "chrome"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Date(2026, 7, 20, 1, 2, 3, 0, time.UTC)
+
+	if err := controller.Step(core.State{Buttons: core.DPadUp}, 1.0/120, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.observations) != 1 {
+		t.Fatalf("observations = %+v", recorder.observations)
+	}
+	got := recorder.observations[0]
+	if !got.At.Equal(now) || got.ActiveProfile != "chrome" || got.BindingProfile != "default" ||
+		got.Control != "dpad_up" || got.Gesture != "dpad_up" || got.Action != string(core.ArrowUp) ||
+		got.Resolution != usage.ResolutionBound || got.Outcome != usage.OutcomeSuccess {
+		t.Fatalf("observation = %+v", got)
+	}
+}
+
+func TestUsageRecordsEachDigitalRisingEdgeOnce(t *testing.T) {
+	desktop := &fakeDesktop{profile: "default"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Now()
+	states := []core.State{
+		{Buttons: core.A},
+		{Buttons: core.A},
+		{},
+		{},
+		{Buttons: core.A},
+	}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(recorder.observations) != 2 {
+		t.Fatalf("held/released button was double counted: %+v", recorder.observations)
+	}
+	for _, observation := range recorder.observations {
+		if observation.Control != "a" || observation.Action != string(core.ClickLeft) || observation.Outcome != usage.OutcomeSuccess {
+			t.Fatalf("observation = %+v", observation)
+		}
+	}
+}
+
+func TestUsageRecordsDisabledAndUnboundControls(t *testing.T) {
+	settings := config.Default()
+	settings.Bindings = map[string]map[string]string{"chrome": {"a": ""}}
+	desktop := &fakeDesktop{profile: "chrome"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(settings, fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Now()
+
+	for index, state := range []core.State{{Buttons: core.A}, {}, {Buttons: core.Start}} {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(desktop.actions) != 0 || len(recorder.observations) != 2 {
+		t.Fatalf("actions=%v observations=%+v", desktop.actions, recorder.observations)
+	}
+	disabled, unbound := recorder.observations[0], recorder.observations[1]
+	if disabled.Control != "a" || disabled.BindingProfile != "chrome" || disabled.Resolution != usage.ResolutionDisabled || disabled.Outcome != usage.OutcomeNone {
+		t.Fatalf("disabled observation = %+v", disabled)
+	}
+	if unbound.Control != "start" || unbound.Gesture != "start" || unbound.BindingProfile != "" || unbound.Resolution != usage.ResolutionUnbound || unbound.Outcome != usage.OutcomeNone {
+		t.Fatalf("unbound observation = %+v", unbound)
+	}
+}
+
+func TestUsageRecordsChordButNotWindowCommit(t *testing.T) {
+	desktop := &fakeDesktop{profile: "chrome"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Now()
+	states := []core.State{
+		{Buttons: core.RightShoulder, LeftTrigger: 1},
+		{Buttons: core.RightShoulder, LeftTrigger: 1},
+		{LeftTrigger: 1},
+		{},
+	}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(recorder.observations) != 2 {
+		t.Fatalf("window commit or held chord was double counted: %+v", recorder.observations)
+	}
+	trigger, chord := recorder.observations[0], recorder.observations[1]
+	if trigger.Control != "lt" || trigger.Resolution != usage.ResolutionObserved || trigger.Outcome != usage.OutcomeNone {
+		t.Fatalf("trigger observation = %+v", trigger)
+	}
+	if chord.Control != "rb" || chord.Gesture != "lt+rb" || chord.Action != string(core.WindowNext) ||
+		chord.ActiveProfile != "chrome" || chord.BindingProfile != "default" || chord.Outcome != usage.OutcomeSuccess {
+		t.Fatalf("chord observation = %+v", chord)
+	}
+	if !reflect.DeepEqual(desktop.actions, []core.Action{core.WindowCycleNext, core.WindowCycleCommit}) {
+		t.Fatalf("desktop actions = %v", desktop.actions)
+	}
+}
+
+func TestDisabledTriggerChordKeepsExistingBaseBindingBehavior(t *testing.T) {
+	settings := config.Default()
+	settings.Bindings = map[string]map[string]string{"chrome": {"lt+rb": ""}}
+	desktop := &fakeDesktop{profile: "chrome"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(settings, fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+
+	if err := controller.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(desktop.actions, []core.Action{core.TabNext}) {
+		t.Fatalf("desktop actions = %v", desktop.actions)
+	}
+	if len(recorder.observations) != 2 || recorder.observations[1].Gesture != "rb" || recorder.observations[1].Action != string(core.TabNext) {
+		t.Fatalf("usage observations = %+v", recorder.observations)
+	}
+}
+
+func TestUsageRecordsFailureOnceAndConsumesEdge(t *testing.T) {
+	desktop := &fakeDesktop{profile: "default", performError: errors.New("injected failure")}
+	recorder := &fakeUsageRecorder{}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Now()
+	state := core.State{Buttons: core.DPadUp}
+
+	if err := controller.Step(state, 1.0/120, now); err == nil {
+		t.Fatal("expected action failure")
+	}
+	if err := controller.Step(state, 1.0/120, now.Add(time.Millisecond)); err != nil {
+		t.Fatalf("held failed edge was retried: %v", err)
+	}
+	if len(recorder.observations) != 1 || recorder.observations[0].Outcome != usage.OutcomeFailure {
+		t.Fatalf("failure observations = %+v", recorder.observations)
+	}
+}
+
+func TestUsageDoesNotCountVoiceDeleteRepeats(t *testing.T) {
+	desktop := &fakeDesktop{profile: "codex"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Now()
+	states := []struct {
+		state core.State
+		at    time.Time
+	}{
+		{core.State{Buttons: core.Y}, now},
+		{core.State{}, now.Add(time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(2 * time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(330 * time.Millisecond)},
+		{core.State{Buttons: core.B}, now.Add(410 * time.Millisecond)},
+		{core.State{}, now.Add(500 * time.Millisecond)},
+	}
+	for _, item := range states {
+		if err := controller.Step(item.state, 1.0/120, item.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(recorder.observations) != 2 {
+		t.Fatalf("voice repeat was counted: %+v", recorder.observations)
+	}
+	if recorder.observations[1].Gesture != "voice+b" || recorder.observations[1].Action != string(core.Backspace) {
+		t.Fatalf("voice delete observation = %+v", recorder.observations[1])
+	}
+}
+
+func TestUsageRecordsAnalogInactiveToActiveEdgesAndDisconnectReset(t *testing.T) {
+	desktop := &fakeDesktop{profile: "default"}
+	recorder := &fakeUsageRecorder{}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller.SetUsageRecorder(recorder)
+	now := time.Now()
+	active := core.State{LeftTrigger: 1, RightTrigger: 1, LeftX: 1, RightX: 1}
+	states := []core.State{active, active, {}, active}
+	for index, state := range states {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	controller.disconnect()
+	if err := controller.Step(active, 1.0/120, now.Add(10*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.observations) != 12 {
+		t.Fatalf("analog observations = %+v", recorder.observations)
+	}
+	wantControls := []string{"lt", "rt", "left_stick", "right_stick"}
+	for group := 0; group < 3; group++ {
+		for index, control := range wantControls {
+			observation := recorder.observations[group*len(wantControls)+index]
+			if observation.Control != control || observation.Gesture != control || observation.Resolution != usage.ResolutionObserved || observation.Outcome != usage.OutcomeNone {
+				t.Fatalf("analog observation = %+v", observation)
+			}
+		}
+	}
+}
+
+func TestUsageRecordsIndividualStartAndBackEdges(t *testing.T) {
+	now := time.Now()
+	controller := New(config.Default(), fakeGamepad{}, &fakeDesktop{profile: "default"}, false, nil)
+	recorder := &fakeUsageRecorder{}
+	controller.SetUsageRecorder(recorder)
+	for index, state := range []core.State{{Buttons: core.Start}, {}, {Buttons: core.Back}} {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(recorder.observations) != 2 || recorder.observations[0].Control != "start" || recorder.observations[1].Control != "back" {
+		t.Fatalf("single system-button observations = %+v", recorder.observations)
+	}
+	for _, observation := range recorder.observations {
+		if observation.Resolution != usage.ResolutionUnbound || observation.Outcome != usage.OutcomeNone {
+			t.Fatalf("single system button = %+v", observation)
+		}
+	}
+}
+
+func TestUsageRecordsBriefBackStartAsPhysicalEdgesWithoutSystemCombo(t *testing.T) {
+	settings := config.Default()
+	settings.ExitHoldSeconds = 0.1
+	now := time.Now()
+	controller := New(settings, fakeGamepad{}, &fakeDesktop{profile: "default"}, false, nil)
+	recorder := &fakeUsageRecorder{}
+	controller.SetUsageRecorder(recorder)
+	combo := core.State{Buttons: core.Back | core.Start}
+
+	for _, step := range []struct {
+		state core.State
+		at    time.Time
+	}{
+		{state: combo, at: now},
+		{state: combo, at: now.Add(50 * time.Millisecond)},
+		{state: core.State{}, at: now.Add(60 * time.Millisecond)},
+	} {
+		if err := controller.Step(step.state, 1.0/120, step.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if len(recorder.observations) != 2 {
+		t.Fatalf("brief Back+Start observations = %+v", recorder.observations)
+	}
+	for index, want := range []string{"back", "start"} {
+		observation := recorder.observations[index]
+		if observation.Control != want || observation.Gesture != want || observation.Resolution != usage.ResolutionUnbound || observation.Outcome != usage.OutcomeNone {
+			t.Fatalf("brief Back+Start observation %d = %+v", index, observation)
+		}
+	}
+}
+
+func TestUsageRecordsSequentialBackStartEdgesAndSystemComboAtThreshold(t *testing.T) {
+	now := time.Now()
+
+	settings := config.Default()
+	settings.ExitHoldSeconds = 0.1
+	controller := New(settings, fakeGamepad{}, &fakeDesktop{profile: "codex", processName: "ChatGPT.exe"}, false, nil)
+	recorder := &fakeUsageRecorder{}
+	controller.SetUsageRecorder(recorder)
+	if err := controller.Step(core.State{Buttons: core.Back}, 1.0/120, now); err != nil {
+		t.Fatal(err)
+	}
+	combo := core.State{Buttons: core.Back | core.Start}
+	comboStarted := now.Add(10 * time.Millisecond)
+	if err := controller.Step(combo, 1.0/120, comboStarted); err != nil {
+		t.Fatal(err)
+	}
+	exitAt := comboStarted.Add(200 * time.Millisecond)
+	if err := controller.Step(combo, 1.0/120, exitAt); !errors.Is(err, ErrExitRequested) {
+		t.Fatalf("emergency exit error = %v", err)
+	}
+	if err := controller.Step(combo, 1.0/120, exitAt.Add(time.Millisecond)); err != nil {
+		t.Fatalf("emergency exit was emitted repeatedly: %v", err)
+	}
+	if len(recorder.observations) != 3 {
+		t.Fatalf("emergency exit observations = %+v", recorder.observations)
+	}
+	for index, want := range []string{"back", "start"} {
+		observation := recorder.observations[index]
+		if observation.ForegroundApp != "ChatGPT.exe" || observation.Control != want || observation.Gesture != want || observation.Resolution != usage.ResolutionUnbound || observation.Outcome != usage.OutcomeNone {
+			t.Fatalf("physical system-button observation %d = %+v", index, observation)
+		}
+	}
+	observation := recorder.observations[2]
+	if !observation.At.Equal(exitAt) || observation.ForegroundApp != "ChatGPT.exe" || observation.ActiveProfile != "codex" || observation.Control != "back+start" ||
+		observation.Gesture != "back+start" || observation.Action != "emergency_exit" ||
+		observation.Resolution != usage.ResolutionSystem || observation.Outcome != usage.OutcomeSuccess {
+		t.Fatalf("emergency exit observation = %+v", observation)
 	}
 }

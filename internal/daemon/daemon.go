@@ -8,23 +8,35 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+var errPIDLockHeld = errors.New("process lock is already held")
+
 type Paths struct {
-	PIDFile  string
-	StopFile string
-	LogFile  string
-	ErrFile  string
+	PIDFile           string
+	StopFile          string
+	LogFile           string
+	ErrFile           string
+	UsageDirectory    string
+	UsageSnapshotFile string
+	UsageWALFile      string
+	UsageReportFile   string
 }
 
 func RuntimePaths(configPath string) Paths {
 	base := filepath.Dir(configPath)
+	usageDirectory := filepath.Join(base, "usage")
 	return Paths{
-		PIDFile:  filepath.Join(base, "couchpilot.pid"),
-		StopFile: filepath.Join(base, "couchpilot.stop"),
-		LogFile:  filepath.Join(base, "logs", "couchpilot.log"),
-		ErrFile:  filepath.Join(base, "logs", "couchpilot.err.log"),
+		PIDFile:           filepath.Join(base, "couchpilot.pid"),
+		StopFile:          filepath.Join(base, "couchpilot.stop"),
+		LogFile:           filepath.Join(base, "logs", "couchpilot.log"),
+		ErrFile:           filepath.Join(base, "logs", "couchpilot.err.log"),
+		UsageDirectory:    usageDirectory,
+		UsageSnapshotFile: filepath.Join(usageDirectory, "usage-v1.snapshot.json"),
+		UsageWALFile:      filepath.Join(usageDirectory, "usage-v1.wal.jsonl"),
+		UsageReportFile:   filepath.Join(usageDirectory, "usage-v1-report.html"),
 	}
 }
 
@@ -116,20 +128,41 @@ func ClaimPID(path string) (func(), error) {
 	if path == "" {
 		return func() {}, nil
 	}
-	if pid, running := Status(path); running && pid != os.Getpid() {
-		return nil, fmt.Errorf("another instance is running with pid %d", pid)
-	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, err
+	}
+	releaseLock, err := claimPIDLock(path)
+	if err != nil {
+		if errors.Is(err, errPIDLockHeld) {
+			if pid, running := Status(path); running && pid != os.Getpid() {
+				return nil, fmt.Errorf("another instance is running with pid %d", pid)
+			}
+			return nil, errors.New("another instance is already starting or running")
+		}
+		return nil, fmt.Errorf("claim process lock: %w", err)
+	}
+	releaseOnError := true
+	defer func() {
+		if releaseOnError {
+			releaseLock()
+		}
+	}()
+	if pid, running := Status(path); running && pid != os.Getpid() {
+		return nil, fmt.Errorf("another instance is running with pid %d", pid)
 	}
 	value := strconv.Itoa(os.Getpid())
 	if err := os.WriteFile(path, []byte(value+"\n"), 0o644); err != nil {
 		return nil, err
 	}
+	releaseOnError = false
+	var releaseOnce sync.Once
 	return func() {
-		data, err := os.ReadFile(path)
-		if err == nil && strings.TrimSpace(string(data)) == value {
-			_ = os.Remove(path)
-		}
+		releaseOnce.Do(func() {
+			data, err := os.ReadFile(path)
+			if err == nil && strings.TrimSpace(string(data)) == value {
+				_ = os.Remove(path)
+			}
+			releaseLock()
+		})
 	}, nil
 }

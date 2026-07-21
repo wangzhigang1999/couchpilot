@@ -25,9 +25,10 @@ cd <path-to-couchpilot>
 ```
 
 When CouchPilot is running on Windows, its small controller icon appears in
-the notification area. Right-click it to open the logs or configuration
-folder, or to exit CouchPilot cleanly. Windows may place a new icon under the
-notification-area overflow arrow the first time it runs.
+the notification area. Right-click it to view the local key-strategy report,
+open logs or configuration, or exit CouchPilot cleanly. Windows may
+place a new icon under the notification-area overflow arrow the first time it
+runs.
 
 You can also double-click `couchpilot.exe`: Explorer launches it directly in
 the background without leaving a console window open. Running the same file
@@ -52,6 +53,64 @@ Installation starts CouchPilot immediately. A normal `stop` does not trigger a r
 ```
 
 Holding **Back + Start** for 1.5 seconds is still the emergency exit.
+
+## Local key-strategy tracing
+
+CouchPilot records small, local-only aggregate facts to make later binding
+decisions evidence-based. Besides button and recognized-chord counts, it keeps
+the foreground executable's base name (for example `ChatGPT.exe` or
+`chrome.exe`), the active and winning mapping profiles, the selected action,
+and the current mapping-strategy revision. Coarse tracing also distinguishes
+physical overlap from the gesture that was finally resolved, groups hold and
+transition timing into broad buckets, and summarizes interaction, compose,
+window-switching, and repeat episodes. This is meant to answer which bindings
+are useful in each app, which chords may be awkward, and where a remap deserves
+an experiment. CouchPilot still does not change bindings automatically.
+
+The recorder does **not** install a keyboard hook or save typed text, window
+titles, full process paths, controller identifiers, pointer coordinates, or
+an exact timestamped input timeline. It keeps only the executable base name,
+never its location. Timing and episode signals are stored only as daily local
+aggregate facts in coarse buckets. While recording is enabled, compaction
+keeps a rolling 90-day window; turning recording off freezes the existing
+local files until they are removed manually. Nothing is uploaded. Data stays
+beside `config.json` in
+`usage\usage-v1.snapshot.json`; the neighboring JSONL file is a bounded crash-
+recovery journal, not a browsing history.
+
+While new observations are pending, the snapshot refreshes automatically
+about once a minute. The snapshot and the recent journal together form the
+current durable record; `usage-v1.snapshot.json.bak` is an internal recovery
+copy.
+
+Right-click the tray icon and choose **查看按键报告** to open a readable local
+HTML report, or print the same live summary in a terminal:
+
+```powershell
+.\bin\couchpilot.exe usage
+```
+
+For a quick acceptance check, note the current count for one button, press it
+three times, wait about ten seconds (up to fifteen), then refresh the report.
+The count should increase by three and the button should disappear from the
+current-strategy not-observed list. Test a defined chord such as `LT+RB` the
+same way. After a
+little normal use, the strategy section can also surface chord near-misses and
+suspected corrections. A near-miss means physical controls overlapped without
+resolving to that chord; a suspected correction means a coarse follow-up
+pattern looked corrective. Trigger probes observed during pointer or stick
+activity are shown as ambiguous and excluded from the recommendation
+denominator. Recommendations also require a denominator, a minimum rate, and
+evidence on more than one day. None of these signals proves the user's intent
+or an actual mistake, so treat them as leads to investigate rather than
+automatic remapping rules. Likewise, **dispatch succeeded/failed** describes
+only whether CouchPilot sent the system action, not whether the user's task
+succeeded.
+
+Local aggregate recording is enabled by default. Set
+`local_usage_stats_enabled` to `false` to stop adding observations. Existing
+records and the tray report remain available until you stop CouchPilot and
+remove the `usage` folder.
 
 ## Controls
 
@@ -99,6 +158,9 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 `config.json` is the stable configuration contract for the CLI and a future UI. A UI only needs to validate and edit this file; the engine remains unchanged.
 
 Set `haptics_enabled` to `false` to disable vibration, or adjust `haptic_strength` from `0.0` to `2.0`. The default is `1.0`.
+
+Set `local_usage_stats_enabled` to `false` to disable the local aggregate
+key-strategy facts described above. This setting never enables network upload.
 
 `voice_submit_timeout_seconds` controls how long an app-specific voice compose mode remains armed. Codex, QQ/WeChat, Claude, and Cherry Studio are currently whitelisted: after `Y`, tap `A` to submit, tap `B` to delete one character, hold `B` to keep deleting, or move the pointer to restore normal mouse behavior. `RT+A` always submits in a whitelisted profile. Chat apps currently assume Enter-to-send.
 
@@ -148,6 +210,7 @@ To check which profile CouchPilot sees for the foreground app, focus that app an
 
 - `internal/core`: platform-neutral device state, actions and narrow interfaces.
 - `internal/engine`: pointer math, edge detection, profiles and configurable binding resolution.
+- `internal/usage`: 90-day local key-strategy aggregates with crash-recovery journaling.
 - `internal/platform/windows`: XInput and Windows desktop output.
 - `internal/platform`: platform factory; a future macOS adapter can implement the same interfaces.
 - `internal/config`: versioned JSON schema shared by the CLI and future UI.

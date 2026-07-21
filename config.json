@@ -15,6 +15,7 @@
   "haptics_enabled": true,
   "haptic_strength": 1.0,
   "exit_hold_seconds": 1.5,
+  "local_usage_stats_enabled": true,
   "app_profiles": [
     { "name": "codex", "process_names": ["ChatGPT.exe"], "path_contains": ["\\OpenAI.Codex_"] },
     { "name": "chrome", "process_names": ["chrome.exe", "msedge.exe", "firefox.exe"] },
