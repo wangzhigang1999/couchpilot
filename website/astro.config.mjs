@@ -41,7 +41,6 @@ export default defineConfig({
           items: [
             { slug: "guide/controls" },
             { slug: "guide/tracing" },
-            { slug: "guide/startup" },
             { slug: "guide/window-switching" },
             { slug: "guide/haptics" },
             { slug: "guide/safety" },

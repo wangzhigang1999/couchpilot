@@ -3,14 +3,19 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+
 jobs:
   windows:
-    name: Test and build (Windows)
+    name: Build Windows x64
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -20,9 +25,146 @@ jobs:
           cache: true
       - name: Test and build
         shell: pwsh
-        run: .\scripts\build.ps1
+        run: |
+          $version = "0.0.0"
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            if ($env:GITHUB_REF_NAME -notmatch '^v(\d+\.\d+\.\d+)$') {
+              throw "Release tags must use vMAJOR.MINOR.PATCH"
+            }
+            $version = $Matches[1]
+          }
+          .\scripts\build.ps1 -Version $version
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive `
+            -Path bin\couchpilot.exe, config.json, README.md, LICENSE `
+            -DestinationPath dist\CouchPilot-windows-amd64.zip
       - uses: actions/upload-artifact@v7
         with:
-          name: couchpilot-windows-amd64
-          path: bin/couchpilot.exe
+          name: CouchPilot-windows-amd64
+          path: dist/CouchPilot-windows-amd64.zip
           if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: amd64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test and build
+        shell: bash
+        env:
+          GOARCH: ${{ matrix.arch }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          version=0.0.0
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+              echo "Release tags must use vMAJOR.MINOR.PATCH" >&2
+              exit 1
+            fi
+            version="${BASH_REMATCH[1]}"
+          fi
+          VERSION="$version" ./scripts/build-macos.sh
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            bin/CouchPilot.app "dist/CouchPilot-macos-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CouchPilot-macos-${{ matrix.arch }}
+          path: dist/CouchPilot-macos-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish release
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: CouchPilot-*
+          path: release
+          merge-multiple: true
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd release
+          sha256sum ./*.zip > SHA256SUMS.txt
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets=(release/*.zip release/SHA256SUMS.txt)
+
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tag="$GITHUB_REF_NAME"
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $tag already exists; leaving the published version unchanged."
+              exit 0
+            fi
+            gh release create "$tag" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --generate-notes \
+              --latest
+            exit 0
+          fi
+
+          notes_file=$(mktemp)
+          {
+            echo "Rolling build from the latest commit on \`main\`."
+            echo
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo
+            echo "This prerelease is replaced automatically after each successful CI build."
+          } > "$notes_file"
+
+          if gh release view latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/git/refs/tags/latest" \
+              -f sha="$GITHUB_SHA" \
+              -F force=true >/dev/null
+            gh release upload latest "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+            gh release edit latest \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Latest development build" \
+              --notes-file "$notes_file" \
+              --prerelease \
+              --latest=false
+          else
+            gh release create latest "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Latest development build" \
+              --notes-file "$notes_file" \
+              --prerelease \
+              --latest=false
+          fi

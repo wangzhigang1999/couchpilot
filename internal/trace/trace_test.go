@@ -183,6 +183,48 @@ func TestRecorderResetsTheSingleFileAtSizeLimit(t *testing.T) {
 	if len(entries) != 1 || entries[0].Name() != fileName {
 		t.Fatalf("trace reset created extra files: %+v", entries)
 	}
+	info, err := os.Stat(Path(directory))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() >= maxFileBytes {
+		t.Fatalf("trace size after reset = %d, want less than %d", info.Size(), maxFileBytes)
+	}
+}
+
+func TestRecorderReportsResetFailure(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(Path(directory), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(Path(directory), maxFileBytes); err != nil {
+		t.Fatal(err)
+	}
+	var errorSeen error
+	recorder, err := Open(Options{
+		Directory: directory,
+		OnError: func(err error) {
+			errorSeen = err
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	recorder.Record(Fact{Kind: InputAttempt, Control: "a"})
+	if errorSeen == nil || !strings.Contains(errorSeen.Error(), "reset full trace") {
+		t.Fatalf("reset error = %v, want reset full trace error", errorSeen)
+	}
+	recorder.Record(Fact{Kind: InputAttempt, Control: "b"})
+	if err := recorder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	lines := readLines(t, Path(directory))
+	if len(lines) != 1 || !strings.Contains(lines[0], `"control":"b"`) {
+		t.Fatalf("trace did not recover after reset error: %q", lines)
+	}
 }
 
 func TestRecorderReportsInvalidFactsAndKeepsWriting(t *testing.T) {

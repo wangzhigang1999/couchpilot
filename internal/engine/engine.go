@@ -49,6 +49,8 @@ type Engine struct {
 	rumbleSentRight      uint16
 	windowSwitching      bool
 	composeProfile       string
+	composeForegroundApp string
+	composeReadyAt       time.Time
 	composeUntil         time.Time
 	repeatButton         core.Button
 	repeatAction         core.Action
@@ -136,6 +138,17 @@ func (e *Engine) Run(ctx context.Context) error {
 			e.clock.Sleep(500 * time.Millisecond)
 			continue
 		}
+		if device, alternative, found, err := e.findAlternativeInput(state); err != nil {
+			return err
+		} else if found {
+			previous := e.device
+			e.disconnect()
+			e.device = device
+			e.logger.Printf("controller %s took over from %s", device, previous)
+			e.pulseHaptic(28000, 20000, 120*time.Millisecond)
+			e.updateRumble(frameStarted)
+			state = alternative
+		}
 		if err := e.Step(state, dt, frameStarted); err != nil {
 			return err
 		}
@@ -214,6 +227,39 @@ func (e *Engine) findDevice() (core.DeviceID, bool, error) {
 		return "", false, nil
 	}
 	return devices[0], true, nil
+}
+
+// findAlternativeInput lets any controller take over when device selection is
+// automatic. The current controller keeps priority while it is actively used,
+// which avoids oscillating between two people holding controls at once.
+func (e *Engine) findAlternativeInput(current core.State) (core.DeviceID, core.State, bool, error) {
+	if e.settings.DeviceID != "" || e.settings.ControllerIndex >= 0 || stateHasInput(current) {
+		return "", core.State{}, false, nil
+	}
+	devices, err := e.gamepad.Devices()
+	if err != nil {
+		return "", core.State{}, false, err
+	}
+	for _, device := range devices {
+		if device == e.device {
+			continue
+		}
+		state, connected, err := e.gamepad.Read(device, e.settings.Deadzone)
+		if err != nil {
+			return "", core.State{}, false, err
+		}
+		if connected && stateHasInput(state) {
+			return device, state, true, nil
+		}
+	}
+	return "", core.State{}, false, nil
+}
+
+func stateHasInput(state core.State) bool {
+	return state.Buttons != 0 ||
+		state.LeftTrigger > 0.08 || state.RightTrigger > 0.08 ||
+		math.Abs(state.LeftX) > 1e-4 || math.Abs(state.LeftY) > 1e-4 ||
+		math.Abs(state.RightX) > 1e-4 || math.Abs(state.RightY) > 1e-4
 }
 
 func (e *Engine) movePointer(state core.State, dt float64, now time.Time) error {
@@ -358,16 +404,28 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 			continue
 		}
 		gesture := item.gesture
-		composeActive := e.composeActive(profile, now)
+		composeActive := e.composeActive(profile, foregroundApp, now)
 		noTrigger := state.LeftTrigger <= 0.08 && state.RightTrigger <= 0.08
 		composeSubmit := false
 		composeDelete := false
 		if composeActive && noTrigger && gesture == "a" {
+			if now.Before(e.composeReadyAt) {
+				resolved := e.resolver.ResolveDetailed(profile, "voice+a")
+				e.recordResolved(now, item.gesture, resolved, trace.NoOutcome, foregroundApp, state, simultaneous)
+				if e.verbose {
+					e.logger.Printf("%s voice submit ignored during minimum delay", profile)
+				}
+				continue
+			}
 			gesture = "voice+a"
 			composeSubmit = true
 		} else if composeActive && gesture == "b" {
-			gesture = "voice+b"
-			composeDelete = true
+			if _, found := e.resolver.Resolve(profile, "voice+b"); found {
+				gesture = "voice+b"
+				composeDelete = true
+			} else {
+				e.clearCompose("other_control")
+			}
 		} else if composeActive && gesture != "y" {
 			e.clearCompose("other_control")
 		}
@@ -423,7 +481,7 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 			if composeSubmit {
 				e.clearCompose("submit_succeeded")
 			}
-			e.armCompose(profile, now)
+			e.armCompose(profile, foregroundApp, now)
 			continue
 		}
 		if down, up, held := heldActionPair(action); held {
@@ -478,24 +536,30 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 	return nil
 }
 
-func (e *Engine) armCompose(profile string, now time.Time) {
+func (e *Engine) armCompose(profile, foregroundApp string, now time.Time) {
 	if _, found := e.resolver.Resolve(profile, "voice+a"); !found {
 		e.clearCompose("unsupported")
 		return
 	}
 	e.composeProfile = profile
+	e.composeForegroundApp = foregroundApp
+	e.composeReadyAt = now.Add(time.Duration(e.settings.VoiceSubmitMinDelaySeconds * float64(time.Second)))
 	e.composeUntil = now.Add(time.Duration(e.settings.VoiceSubmitTimeoutSeconds * float64(time.Second)))
 	if e.verbose {
-		e.logger.Printf("%s voice compose armed; A submits, B deletes", profile)
+		e.logger.Printf("%s voice submit armed; A presses Enter after %.2fs", profile, e.settings.VoiceSubmitMinDelaySeconds)
 	}
 }
 
-func (e *Engine) composeActive(profile string, now time.Time) bool {
+func (e *Engine) composeActive(profile, foregroundApp string, now time.Time) bool {
 	if e.composeProfile == "" {
 		return false
 	}
 	if profile != e.composeProfile {
 		e.clearCompose("profile_changed")
+		return false
+	}
+	if e.composeForegroundApp != "" && foregroundApp != "" && foregroundApp != e.composeForegroundApp {
+		e.clearCompose("app_changed")
 		return false
 	}
 	if !now.Before(e.composeUntil) {
@@ -519,6 +583,8 @@ func (e *Engine) clearCompose(reason string) {
 		e.logger.Printf("%s voice compose cleared: %s", e.composeProfile, reason)
 	}
 	e.composeProfile = ""
+	e.composeForegroundApp = ""
+	e.composeReadyAt = time.Time{}
 	e.composeUntil = time.Time{}
 	e.stopRepeat(0)
 }
@@ -542,9 +608,13 @@ func (e *Engine) repeatHeldAction(state core.State, now time.Time) error {
 	if e.repeatButton == 0 || state.Buttons&e.repeatButton == 0 || now.Before(e.repeatNext) {
 		return nil
 	}
-	profile, _ := e.foregroundContext()
+	profile, foregroundApp := e.foregroundContext()
 	if profile != e.composeProfile {
 		e.clearCompose("profile_changed")
+		return nil
+	}
+	if e.composeForegroundApp != "" && foregroundApp != "" && foregroundApp != e.composeForegroundApp {
+		e.clearCompose("app_changed")
 		return nil
 	}
 	if err := e.desktop.Perform(e.repeatAction); err != nil {

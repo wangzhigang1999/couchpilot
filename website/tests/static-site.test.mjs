@@ -14,14 +14,14 @@ test("builds English-first bilingual pages for GitHub Pages", async () => {
   assert.match(english, /Leave the keyboard/);
   assert.match(english, /Desktop control · without the desk/);
   assert.match(english, /Voice editing/);
-  assert.match(english, /Voice editing is active only in Codex/);
+  assert.match(english, /Y, speak, pause, then A sends in every app/);
   assert.match(english, /2<\/strong> focused app profiles/);
   assert.match(english, /<html lang="en"/);
   assert.match(english, /\/couchpilot\/zh-cn\//);
   assert.match(chinese, /放下键盘/);
   assert.match(chinese, /离开桌子，也能掌控桌面/);
   assert.match(chinese, /语音编辑/);
-  assert.match(chinese, /语音编辑只在 Codex 中启用/);
+  assert.match(chinese, /所有 App 都支持 Y、说话、稍停后按 A 回车/);
   assert.match(chinese, /2<\/strong> 个专注的 App profile/);
   assert.match(chinese, /<html lang="zh-CN"/);
   assert.match(chinese, /\/couchpilot\/_astro\//);
@@ -57,26 +57,36 @@ test("publishes only Codex and browser profiles in both languages", async () => 
   }
 });
 
-test("keeps the Codex-only voice-edit safety rules in both languages", async () => {
-  const [englishCodex, englishControls, englishSafety, chineseCodex, chineseControls, chineseSafety] = await Promise.all([
+test("documents delayed global voice submit and Codex-only deletion in both languages", async () => {
+  const [englishCodex, englishBrowser, englishControls, englishSafety, chineseCodex, chineseBrowser, chineseControls, chineseSafety] = await Promise.all([
     readFile(new URL("../src/content/docs/apps/codex.md", import.meta.url), "utf8"),
+    readFile(new URL("../src/content/docs/apps/browsers.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/guide/controls.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/guide/safety.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/zh-cn/apps/codex.md", import.meta.url), "utf8"),
+    readFile(new URL("../src/content/docs/zh-cn/apps/browsers.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/zh-cn/guide/controls.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/zh-cn/guide/safety.md", import.meta.url), "utf8"),
   ]);
 
   assert.match(englishCodex, /X always remains right click/);
-  assert.match(englishControls, /Codex adds a temporary voice-edit state/);
-  assert.match(englishControls, /Browsers do not enable voice sending/);
+  assert.match(englishCodex, /Codex additionally arms B as \*\*Backspace\*\*/);
+  assert.match(englishBrowser, /Y<\/kbd>, then <kbd>A/);
+  assert.match(englishControls, /Voice submit in every app/);
+  assert.match(englishControls, /does not receive microphone or VAD events/);
+  assert.match(englishControls, /Pressing A too early is safely ignored/);
   assert.match(englishSafety, /Never steals input focus/);
   assert.match(englishSafety, /A sends only in an explicit voice-edit state/);
+  assert.match(englishSafety, /waits for the configured minimum delay/);
   assert.match(chineseCodex, /X 永远保持右键/);
-  assert.match(chineseControls, /Codex 会增加一个临时语音编辑状态/);
-  assert.match(chineseControls, /浏览器不会启用语音发送/);
+  assert.match(chineseCodex, /Codex 还会额外把 B 变成 \*\*Backspace\*\*/);
+  assert.match(chineseBrowser, /<kbd>Y<\/kbd>，然后 <kbd>A/);
+  assert.match(chineseControls, /所有 App 都能语音后回车/);
+  assert.match(chineseControls, /拿不到麦克风或 VAD 事件/);
+  assert.match(chineseControls, /过早按 A 会被安全忽略/);
   assert.match(chineseSafety, /不会自动抢输入框/);
   assert.match(chineseSafety, /A 只在明确的语音编辑状态发送/);
+  assert.match(chineseSafety, /先等待配置的最短时间/);
 });
 
 test("documents only the minimal privacy-safe local trace", async () => {

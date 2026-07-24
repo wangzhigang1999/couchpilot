@@ -131,12 +131,11 @@ func (r *Recorder) Record(fact Fact) {
 		return
 	}
 	if r.size+int64(len(line)) > maxFileBytes {
-		if err := r.file.Truncate(0); err != nil {
+		if err := r.reset(); err != nil {
 			r.mu.Unlock()
 			r.report(fmt.Errorf("reset full trace: %w", err))
 			return
 		}
-		r.size = 0
 	}
 	written, err := r.file.Write(line)
 	r.size += int64(written)
@@ -147,6 +146,27 @@ func (r *Recorder) Record(fact Fact) {
 	if err != nil {
 		r.report(fmt.Errorf("append trace fact: %w", err))
 	}
+}
+
+func (r *Recorder) reset() error {
+	// Reopen instead of truncating the existing append handle. On Windows that
+	// handle can retain its old write position and leave a sparse file behind.
+	replacement, err := os.OpenFile(r.file.Name(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := replacement.Chmod(0o600); err != nil {
+		_ = replacement.Close()
+		return fmt.Errorf("secure reset trace file: %w", err)
+	}
+
+	previous := r.file
+	r.file = replacement
+	r.size = 0
+	if err := previous.Close(); err != nil {
+		return fmt.Errorf("close full trace: %w", err)
+	}
+	return nil
 }
 
 func (r *Recorder) Close() error {

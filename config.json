@@ -11,6 +11,7 @@
   "scroll_units_per_second": 1100.0,
   "voice_mode": "tap",
   "voice_key": "platform_default",
+  "voice_submit_min_delay_seconds": 2,
   "voice_submit_timeout_seconds": 120,
   "haptics_enabled": true,
   "haptic_strength": 1.0,

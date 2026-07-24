@@ -17,3 +17,6 @@ Use the shoulder buttons for tabs and press the sticks for the address bar and a
 | <kbd>RB</kbd> | Next tab | Ctrl + Tab |
 | <kbd>L3</kbd> | Focus address bar | Ctrl + L |
 | <kbd>R3</kbd> | New tab | Ctrl + T |
+| <kbd>Y</kbd>, then <kbd>A</kbd> | Press Enter after voice input | Enter |
+
+A remains the left mouse button normally. It sends Enter only after the configurable minimum delay inside the explicit temporary state created by Y; an earlier A press is ignored.

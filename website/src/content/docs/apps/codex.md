@@ -22,7 +22,7 @@ Task switching, the command menu, the terminal, and the complete voice-to-send f
 | After <kbd>Y</kbd>, tap or hold <kbd>B</kbd> | Delete one or keep deleting | Backspace |
 | <kbd>RT</kbd> + <kbd>A</kbd> | Send at any time | Enter |
 
-After Y starts voice input, CouchPilot temporarily arms A as **Send** and B as **Backspace**. A short B press deletes one character; holding B starts a steady repeat after a short delay and stops immediately on release. Moving the left stick cancels the voice-edit mode silently and restores the normal mouse controls. The mode also clears when the foreground app changes or after the configured timeout.
+Y then A is the same global voice-submit flow available in every app. Pause for the configured minimum delay after Y before pressing A; an earlier A press is ignored. Codex additionally arms B as **Backspace**: a short press deletes one character, while holding B starts a steady repeat after a short delay and stops immediately on release. Moving the left stick cancels the voice-edit mode silently and restores the normal mouse controls. The mode also clears when the foreground app changes or after the configured timeout.
 
 :::caution[Safety rule]
 X always remains right click so it cannot stop a response in progress. CouchPilot never searches for or clicks the send button, and it never forces focus into the composer.

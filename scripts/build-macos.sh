@@ -4,6 +4,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 architecture=${GOARCH:-$(go env GOARCH)}
 deployment_target=${MACOSX_DEPLOYMENT_TARGET:-11.0}
+version=${VERSION:-0.2.0}
+build_number=${BUILD_NUMBER:-1}
 cache_target=$(printf '%s' "$deployment_target" | tr -c '[:alnum:].-' '_')
 output=${1:-"$root/bin/couchpilot-darwin-$architecture"}
 app_bundle="$root/bin/CouchPilot.app"
@@ -29,6 +31,15 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
+if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    printf 'VERSION must use MAJOR.MINOR.PATCH; received %s\n' "$version" >&2
+    exit 1
+fi
+if ! printf '%s\n' "$build_number" | grep -Eq '^[0-9]+([.][0-9]+)*$'; then
+    printf 'BUILD_NUMBER must contain numeric components; received %s\n' "$build_number" >&2
+    exit 1
+fi
+
 export GOPATH="$root/.cache/gopath"
 export GOMODCACHE="$GOPATH/pkg/mod"
 export GOCACHE="$root/.cache/go-build/darwin-$architecture-macos-$cache_target"
@@ -42,6 +53,11 @@ export CGO_LDFLAGS="${CGO_LDFLAGS:-} -mmacosx-version-min=$deployment_target"
 mkdir -p "$(dirname -- "$output")"
 mkdir -p "$root/bin"
 cd "$root"
+unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
+if [ -n "$unformatted" ]; then
+    printf 'Run gofmt on these files:\n%s\n' "$unformatted" >&2
+    exit 1
+fi
 go mod download
 go test ./...
 go vet ./...
@@ -52,6 +68,8 @@ staged_executable="$staged_bundle/Contents/MacOS/CouchPilot"
 mkdir -p "$staged_bundle/Contents/MacOS" "$staged_bundle/Contents/Resources"
 go build -trimpath -ldflags='-s -w' -o "$staged_executable" ./cmd/couchpilot
 cp "$root/assets/macos/Info.plist" "$staged_bundle/Contents/Info.plist"
+plutil -replace CFBundleShortVersionString -string "$version" "$staged_bundle/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$build_number" "$staged_bundle/Contents/Info.plist"
 plutil -replace LSMinimumSystemVersion -string "$deployment_target" "$staged_bundle/Contents/Info.plist"
 if command -v codesign >/dev/null 2>&1; then
 	identity=${CODESIGN_IDENTITY:--}
