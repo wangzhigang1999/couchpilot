@@ -13,9 +13,9 @@ Switching apps or moving the pointer does not make CouchPilot focus a text field
 
 ## A sends only in an explicit voice-edit state
 
-<kbd>A</kbd> stays the left mouse button during normal use. After <kbd>Y</kbd> starts voice input in Codex, CouchPilot temporarily maps <kbd>A</kbd> to Enter so you can send deliberately. Moving the pointer, changing apps, sending, or reaching the configured timeout restores the normal mouse binding.
+<kbd>A</kbd> stays the left mouse button during normal use. After <kbd>Y</kbd> starts voice input, CouchPilot waits for the configured minimum delay before mapping <kbd>A</kbd> to Enter in every app. An earlier A press is ignored, so it cannot send empty input or click away from the focused field. Moving the pointer, changing apps, pressing another control, sending, or reaching the configured timeout restores the normal mouse binding.
 
-Browsers and every app other than Codex never enter this state.
+CouchPilot still never focuses a text field for you: Enter goes only to the control that already has focus.
 
 ## X never stops Codex
 

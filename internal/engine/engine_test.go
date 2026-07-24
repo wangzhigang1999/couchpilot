@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -26,6 +27,33 @@ func (f fakeGamepad) Rumble(_ core.DeviceID, left, right uint16) error {
 	return nil
 }
 
+type multiGamepad struct {
+	devices []core.DeviceID
+	states  map[core.DeviceID]core.State
+}
+
+func (f *multiGamepad) Devices() ([]core.DeviceID, error) {
+	return append([]core.DeviceID(nil), f.devices...), nil
+}
+
+func (f *multiGamepad) Read(device core.DeviceID, _ float64) (core.State, bool, error) {
+	state, connected := f.states[device]
+	return state, connected, nil
+}
+
+func (*multiGamepad) Rumble(core.DeviceID, uint16, uint16) error { return nil }
+
+type cancelOnSleepClock struct {
+	now    time.Time
+	cancel context.CancelFunc
+}
+
+func (f *cancelOnSleepClock) Now() time.Time { return f.now }
+func (f *cancelOnSleepClock) Sleep(duration time.Duration) {
+	f.now = f.now.Add(duration)
+	f.cancel()
+}
+
 type fakeDesktop struct {
 	profile      string
 	processName  string
@@ -34,6 +62,50 @@ type fakeDesktop struct {
 	performError error
 	performHook  func(core.Action, int) error
 	contextCalls int
+}
+
+func TestRunAcceptsInputFromAnyConnectedController(t *testing.T) {
+	gamepad := &multiGamepad{
+		devices: []core.DeviceID{"test:0", "test:1"},
+		states: map[core.DeviceID]core.State{
+			"test:0": {},
+			"test:1": {Buttons: core.A},
+		},
+	}
+	desktop := &fakeDesktop{}
+	ctx, cancel := context.WithCancel(context.Background())
+	controller := New(config.Default(), gamepad, desktop, false, nil)
+	controller.clock = &cancelOnSleepClock{now: time.Now(), cancel: cancel}
+
+	if err := controller.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(desktop.actions, []core.Action{core.MouseLeftDown, core.MouseLeftUp}) {
+		t.Fatalf("actions=%v want click from second controller", desktop.actions)
+	}
+}
+
+func TestConfiguredControllerDoesNotAllowAnotherControllerToTakeOver(t *testing.T) {
+	settings := config.Default()
+	settings.ControllerIndex = 0
+	gamepad := &multiGamepad{
+		devices: []core.DeviceID{"test:0", "test:1"},
+		states: map[core.DeviceID]core.State{
+			"test:0": {},
+			"test:1": {Buttons: core.A},
+		},
+	}
+	desktop := &fakeDesktop{}
+	ctx, cancel := context.WithCancel(context.Background())
+	controller := New(settings, gamepad, desktop, false, nil)
+	controller.clock = &cancelOnSleepClock{now: time.Now(), cancel: cancel}
+
+	if err := controller.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(desktop.actions) != 0 {
+		t.Fatalf("fixed controller accepted another device: %v", desktop.actions)
+	}
 }
 
 func (f *fakeDesktop) MovePointer(x, y int) error {
@@ -80,6 +152,7 @@ func TestResolveDetailedReportsBindingProvenance(t *testing.T) {
 	}{
 		{"active profile", "chrome", "rb", "chrome", "chrome", core.TabNext, BindingBound},
 		{"default fallback", "chrome", "dpad_up", "chrome", "default", core.ArrowUp, BindingBound},
+		{"global voice submit fallback", "chrome", "voice+a", "chrome", "default", core.Enter, BindingBound},
 		{"explicitly disabled", "chrome", "a", "chrome", "chrome", "", BindingDisabled},
 		{"unbound", "chrome", "start", "chrome", "", "", BindingUnbound},
 		{"empty profile normalizes", "", "a", "default", "default", core.ClickLeft, BindingBound},
@@ -287,29 +360,28 @@ func TestCodexXUsesRightMouseInsteadOfEscape(t *testing.T) {
 	}
 }
 
-func TestCodexVoiceThenASubmitsWithoutClicking(t *testing.T) {
-	desktop := &fakeDesktop{profile: "codex"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
-	now := time.Now()
-	states := []core.State{
-		{Buttons: core.Y},
-		{},
-		{Buttons: core.A},
-		{},
-	}
-	for index, state := range states {
-		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	want := []core.Action{core.VoiceTap, core.Enter}
-	if len(desktop.actions) != len(want) {
-		t.Fatalf("unexpected actions: %v", desktop.actions)
-	}
-	for index := range want {
-		if desktop.actions[index] != want[index] {
-			t.Fatalf("unexpected actions: %v", desktop.actions)
-		}
+func TestVoiceThenASubmitsWithoutClickingInEveryProfile(t *testing.T) {
+	for _, profile := range []string{"default", "chrome", "codex", "custom"} {
+		t.Run(profile, func(t *testing.T) {
+			desktop := &fakeDesktop{profile: profile, processName: profile + ".exe"}
+			controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+			now := time.Now()
+			states := []core.State{
+				{Buttons: core.Y},
+				{},
+				{Buttons: core.A},
+				{},
+			}
+			for index, state := range states {
+				if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*2*time.Second)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want := []core.Action{core.VoiceTap, core.Enter}
+			if !reflect.DeepEqual(desktop.actions, want) {
+				t.Fatalf("unexpected actions: %v", desktop.actions)
+			}
+		})
 	}
 }
 
@@ -326,7 +398,7 @@ func TestCodexBDeletesAndKeepsVoiceSubmitArmed(t *testing.T) {
 		{},
 	}
 	for index, state := range states {
-		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
+		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*2*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -338,6 +410,34 @@ func TestCodexBDeletesAndKeepsVoiceSubmitArmed(t *testing.T) {
 		if desktop.actions[index] != want[index] {
 			t.Fatalf("unexpected actions: %v", desktop.actions)
 		}
+	}
+}
+
+func TestVoiceSubmitIgnoresAUntilMinimumDelay(t *testing.T) {
+	settings := config.Default()
+	settings.VoiceSubmitMinDelaySeconds = 2
+	desktop := &fakeDesktop{profile: "default"}
+	controller := New(settings, fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	states := []struct {
+		state core.State
+		at    time.Time
+	}{
+		{core.State{Buttons: core.Y}, now},
+		{core.State{}, now.Add(10 * time.Millisecond)},
+		{core.State{Buttons: core.A}, now.Add(1900 * time.Millisecond)},
+		{core.State{}, now.Add(1910 * time.Millisecond)},
+		{core.State{Buttons: core.A}, now.Add(2 * time.Second)},
+		{core.State{}, now.Add(2*time.Second + 10*time.Millisecond)},
+	}
+	for _, item := range states {
+		if err := controller.Step(item.state, 1.0/120, item.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []core.Action{core.VoiceTap, core.Enter}
+	if !reflect.DeepEqual(desktop.actions, want) {
+		t.Fatalf("early A should be ignored and later A should submit: %v", desktop.actions)
 	}
 }
 
@@ -384,8 +484,8 @@ func TestCodexBOutsideVoiceComposeStillNavigatesBack(t *testing.T) {
 	}
 }
 
-func TestPointerMovementCancelsCodexVoiceSubmit(t *testing.T) {
-	desktop := &fakeDesktop{profile: "codex"}
+func TestPointerMovementCancelsGlobalVoiceSubmit(t *testing.T) {
+	desktop := &fakeDesktop{profile: "default"}
 	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{
@@ -422,31 +522,49 @@ func TestCodexRTAAlwaysSubmits(t *testing.T) {
 	}
 }
 
-func TestVoiceEditWhitelistExcludesBrowser(t *testing.T) {
+func TestVoiceThenBOutsideCodexUsesNormalBindingAndClearsSubmit(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
 	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
-	states := []core.State{{Buttons: core.Y}, {}, {Buttons: core.A}, {}}
+	states := []core.State{{Buttons: core.Y}, {}, {Buttons: core.B}, {}, {Buttons: core.A}, {}}
 	for index, state := range states {
 		if err := controller.Step(state, 1.0/120, now.Add(time.Duration(index)*time.Millisecond)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
-	if len(desktop.actions) != len(want) {
+	want := []core.Action{core.VoiceTap, core.NavigateBack, core.MouseLeftDown, core.MouseLeftUp}
+	if !reflect.DeepEqual(desktop.actions, want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
-	}
-	for index := range want {
-		if desktop.actions[index] != want[index] {
-			t.Fatalf("unexpected actions: %v", desktop.actions)
-		}
 	}
 }
 
-func TestCodexVoiceSubmitTimesOut(t *testing.T) {
+func TestVoiceSubmitCancelsWhenForegroundAppChangesWithinSameProfile(t *testing.T) {
+	desktop := &fakeDesktop{profile: "default", processName: "first.exe"}
+	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	now := time.Now()
+	if err := controller.Step(core.State{Buttons: core.Y}, 1.0/120, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Step(core.State{}, 1.0/120, now.Add(time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	desktop.processName = "second.exe"
+	if err := controller.Step(core.State{Buttons: core.A}, 1.0/120, now.Add(2*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Step(core.State{}, 1.0/120, now.Add(3*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	if !reflect.DeepEqual(desktop.actions, want) {
+		t.Fatalf("unexpected actions: %v", desktop.actions)
+	}
+}
+
+func TestGlobalVoiceSubmitTimesOut(t *testing.T) {
 	settings := config.Default()
 	settings.VoiceSubmitTimeoutSeconds = 5
-	desktop := &fakeDesktop{profile: "codex"}
+	desktop := &fakeDesktop{profile: "chrome"}
 	controller := New(settings, fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []struct {

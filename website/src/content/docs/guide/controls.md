@@ -14,6 +14,7 @@ These controls work in every app. An app profile overrides only the controls exp
 | <kbd>A</kbd> | Left mouse button | Hold to drag or select |
 | <kbd>X</kbd> | Right mouse button | Hold for right-button drag |
 | <kbd>Y</kbd> | Voice input | Taps physical right Alt |
+| <kbd>Y</kbd>, then <kbd>A</kbd> | Press Enter | Available in every app |
 | <kbd>D-pad</kbd> | Arrow keys | Up, down, left, right |
 | <kbd>LT</kbd> | Precision movement | Reduces pointer speed |
 | <kbd>RT</kbd> | Boost movement | Increases pointer speed |
@@ -25,11 +26,11 @@ These controls work in every app. An app profile overrides only the controls exp
 Hold A while moving the left stick. CouchPilot keeps the left mouse button down, so you can select text, move windows, or marquee-select a region.
 :::
 
-## Voice editing in Codex
+## Voice submit in every app
 
-Codex adds a temporary voice-edit state. Press <kbd>Y</kbd> to dictate, tap or hold <kbd>B</kbd> to delete characters, then press <kbd>A</kbd> to send. Moving the pointer cancels the state and restores the normal A/B bindings immediately.
+Press <kbd>Y</kbd> to start voice input, speak, and pause briefly before pressing <kbd>A</kbd>. By default, A can submit only two seconds after Y. CouchPilot triggers the operating system's voice input but does not receive microphone or VAD events, so this configurable minimum delay prevents an immediate accidental send. Pressing A too early is safely ignored instead of clicking or sending. Moving the pointer, changing apps, pressing another control, submitting, or reaching the timeout restores A to the normal left mouse button.
 
-See the Codex page for the exact behavior and safety limits. Browsers do not enable voice sending.
+Codex additionally lets you tap or hold <kbd>B</kbd> to delete characters before submitting. See the Codex page for those app-specific editing controls.
 
 ## How app profiles override controls
 

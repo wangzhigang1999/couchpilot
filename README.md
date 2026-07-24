@@ -15,6 +15,16 @@ CouchPilot is a small, portable Go program that turns a gamepad into a desktop c
 
 The runtime is a single executable with no Python, C toolchain, or external runtime dependency.
 
+## Downloads
+
+Every successful build on `main` refreshes the rolling
+[latest development release](https://github.com/wangzhigang1999/couchpilot/releases/tag/latest)
+with Windows x64, macOS Apple Silicon and macOS Intel packages. Versioned
+releases are created automatically by pushing a semantic tag such as
+`v0.2.0`; the newest versioned release is also exposed through
+[GitHub's stable latest link](https://github.com/wangzhigang1999/couchpilot/releases/latest).
+Each release includes `SHA256SUMS.txt`.
+
 ## Run
 
 ```powershell
@@ -38,18 +48,6 @@ Stop the background process cleanly:
 
 ```powershell
 .\bin\couchpilot.exe stop
-```
-
-Install CouchPilot to start automatically when you sign in to Windows. The scheduled task also retries the process every minute after an unexpected failure, up to 10 times:
-
-```powershell
-.\bin\couchpilot.exe install
-```
-
-Installation starts CouchPilot immediately. A normal `stop` does not trigger a retry. To stop CouchPilot and remove the startup task:
-
-```powershell
-.\bin\couchpilot.exe uninstall
 ```
 
 Holding **Back + Start** for 1.5 seconds is still the emergency exit.
@@ -81,6 +79,7 @@ clears it and starts again instead of creating rotations or backups.
 | B | Back (`Alt+Left`) |
 | X | Right click; supports right-button drag |
 | Y | Voice input: Fn on macOS, right Alt on Windows |
+| Y, then A | Press Enter in the current app |
 | LT | Precision pointer speed |
 | RT | Boost pointer speed |
 | LT + M1 / RB | Next Windows window |
@@ -118,7 +117,7 @@ trace described above. This setting never enables network upload.
 on Windows. Explicit `right_alt` and `left_alt` remain available on both
 platforms; macOS also accepts `fn`.
 
-`voice_submit_timeout_seconds` controls how long Codex voice compose mode remains armed. After `Y`, tap `A` to submit, tap `B` to delete one character, hold `B` to keep deleting, or move the pointer to restore normal mouse behavior. `RT+A` always submits in Codex.
+`voice_submit_min_delay_seconds` is the minimum pause after `Y` before `A` can submit; it defaults to two seconds because CouchPilot triggers the operating system's voice input but does not receive microphone or VAD events. An earlier `A` press is ignored instead of clicking or sending. `voice_submit_timeout_seconds` controls how long the global voice-submit state remains armed. Moving the pointer, changing apps, pressing another control, submitting, or reaching the timeout restores A to its normal mouse action. Codex additionally lets `B` delete one character, hold `B` to keep deleting, and `RT+A` submit at any time.
 
 Bindings are optional overrides grouped by foreground-app profile. `app_profiles` controls which executable selects each profile; matching is case-insensitive, list items are alternatives, and `process_names` plus `path_contains` can disambiguate executables with the same name. Earlier rules win.
 
@@ -133,6 +132,7 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
   "bindings": {
     "default": {
       "a": "click_left",
+      "voice+a": "enter",
       "lt+rb": "window_next"
     },
     "chrome": {
@@ -140,7 +140,6 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
       "l3": "focus_location"
     },
     "codex": {
-      "voice+a": "enter",
       "voice+b": "backspace",
       "rt+a": "enter"
     }
@@ -154,7 +153,7 @@ Set an action to an empty string to disable that exact binding. Run the followin
 .\bin\couchpilot.exe actions
 ```
 
-The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` and `voice+b` are contextual gestures used by Codex for submit and repeatable Backspace. The supplied `config.json` contains the editable Codex and Chrome profiles; all other apps use the `default` bindings.
+The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` is the global contextual Enter gesture after Y; `voice+b` remains Codex's contextual, repeatable Backspace. The supplied `config.json` contains the editable Codex and Chrome profiles; all other apps use the `default` bindings.
 
 To check which profile CouchPilot sees for the foreground app, focus that app and run:
 
@@ -204,9 +203,8 @@ The macOS adapter uses Apple's GameController API with an IOHID fallback for
 Xbox-compatible USB receivers, and CoreGraphics for desktop input. On first
 use, CouchPilot requests **System Settings → Privacy & Security →
 Accessibility** access and exits instead of pretending input was sent. Grant
-access, then start it again. The background service can be installed and
-removed with `install` and `uninstall`; it uses a per-user LaunchAgent.
-While running, a monochrome controller icon appears in the macOS menu bar. Its
+access, then start it again. While running, a monochrome controller icon
+appears in the macOS menu bar. Its
 menu opens logs or the configuration folder and can exit CouchPilot cleanly.
 AppKit and GameController share one process: AppKit
 owns the main thread while the mapping engine samples background controller

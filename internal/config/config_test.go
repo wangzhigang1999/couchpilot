@@ -19,7 +19,8 @@ func TestLoadPartialConfigAndKeepDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.ControllerIndex != 1 || settings.PollHz != 120 || settings.VoiceKey != "platform_default" || !settings.LocalTraceEnabled || len(settings.AppProfiles) != 2 {
+	if settings.ControllerIndex != 1 || settings.PollHz != 120 || settings.VoiceKey != "platform_default" ||
+		settings.VoiceSubmitMinDelaySeconds != 2 || !settings.LocalTraceEnabled || len(settings.AppProfiles) != 2 {
 		t.Fatalf("unexpected settings: %+v", settings)
 	}
 }
@@ -227,6 +228,28 @@ func TestRejectsOutOfRangeVoiceSubmitTimeout(t *testing.T) {
 	settings.VoiceSubmitTimeoutSeconds = 4
 	if settings.Validate() == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestRejectsOutOfRangeVoiceSubmitMinDelay(t *testing.T) {
+	tests := []struct {
+		name    string
+		delay   float64
+		timeout float64
+	}{
+		{"negative", -0.1, 120},
+		{"too long", 10.1, 120},
+		{"not before timeout", 5, 5},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			settings := Default()
+			settings.VoiceSubmitMinDelaySeconds = test.delay
+			settings.VoiceSubmitTimeoutSeconds = test.timeout
+			if settings.Validate() == nil {
+				t.Fatal("expected validation error")
+			}
+		})
 	}
 }
 
