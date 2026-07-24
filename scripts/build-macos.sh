@@ -53,6 +53,11 @@ export CGO_LDFLAGS="${CGO_LDFLAGS:-} -mmacosx-version-min=$deployment_target"
 mkdir -p "$(dirname -- "$output")"
 mkdir -p "$root/bin"
 cd "$root"
+unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
+if [ -n "$unformatted" ]; then
+    printf 'Run gofmt on these files:\n%s\n' "$unformatted" >&2
+    exit 1
+fi
 go mod download
 go test ./...
 go vet ./...

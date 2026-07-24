@@ -49,6 +49,18 @@ try {
         throw "Missing Windows icon: $icon"
     }
 
+    $goFiles = @(git ls-files -- "*.go")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Listing tracked Go files failed with exit code $LASTEXITCODE"
+    }
+    $unformatted = @(& gofmt -l -- @goFiles)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Go formatting check failed with exit code $LASTEXITCODE"
+    }
+    if ($unformatted.Count -gt 0) {
+        throw "Run gofmt on these files:`n$($unformatted -join "`n")"
+    }
+
     Invoke-Checked { go mod download } "Go dependency download"
     Invoke-Checked { go test ./... } "Go tests"
     Invoke-Checked { go vet ./... } "Go static checks"
