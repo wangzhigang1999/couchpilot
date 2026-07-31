@@ -260,3 +260,13 @@ func TestRejectsOutOfRangeHapticStrength(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestRejectsEngineOperationsAsUserBindings(t *testing.T) {
+	settings := Default()
+	settings.Bindings = map[string]map[string]string{
+		"default": {"a": string(core.MouseLeftDown)},
+	}
+	if err := settings.Validate(); err == nil {
+		t.Fatal("engine-only mouse operation was accepted as a configurable action")
+	}
+}

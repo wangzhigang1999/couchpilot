@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/mapping"
 	"github.com/wangzhigang1999/couchpilot/internal/trace"
 )
 
@@ -16,14 +17,14 @@ func (s *factSink) Record(fact trace.Fact) {
 }
 
 func TestPhysicalGestureIncludesActiveTrigger(t *testing.T) {
-	resolved := ResolvedBinding{Gesture: "rt+a"}
+	resolved := mapping.ResolvedBinding{Gesture: "rt+a"}
 	if got := physicalGestureForAttempt("a", resolved, core.State{RightTrigger: 1}); got != "rt+a" {
 		t.Fatalf("physical gesture = %q", got)
 	}
 }
 
 func TestPhysicalGestureKeepsVoiceSequence(t *testing.T) {
-	resolved := ResolvedBinding{Gesture: "voice+b"}
+	resolved := mapping.ResolvedBinding{Gesture: "voice+b"}
 	if got := physicalGestureForAttempt("b", resolved, core.State{}); got != "voice+b" {
 		t.Fatalf("physical gesture = %q", got)
 	}

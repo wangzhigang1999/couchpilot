@@ -21,9 +21,11 @@ go vet ./...
 
 ## Design boundaries
 
-- Keep device and operating-system APIs behind the interfaces in `internal/core`.
-- Keep mapping decisions and pointer math in `internal/engine`.
-- Add platform implementations under `internal/platform`.
+- Keep user-configurable actions separate from engine-only lifecycle operations in `internal/core`.
+- Keep bindings, fallback and app-profile matching in `internal/mapping`.
+- Keep semantic shortcut recipes in `internal/desktop`; platform adapters translate only logical keys and true OS primitives.
+- Keep controller lifecycle and gesture/session state in the focused files under `internal/engine`.
+- Add OS implementations and build-tagged composition under `internal/platform`.
 - Treat `config.json` as a versioned public contract; update validation and tests when changing it.
 - Prefer small interfaces and data-driven bindings over a plugin framework.
 

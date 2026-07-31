@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/mapping"
 	"github.com/wangzhigang1999/couchpilot/internal/trace"
 )
 
@@ -19,7 +20,7 @@ func (e *Engine) emit(fact trace.Fact) {
 	e.traceSink.Record(fact)
 }
 
-func physicalGestureForAttempt(control string, resolved ResolvedBinding, state core.State) string {
+func physicalGestureForAttempt(control string, resolved mapping.ResolvedBinding, state core.State) string {
 	if strings.HasPrefix(resolved.Gesture, "voice+") {
 		return resolved.Gesture
 	}

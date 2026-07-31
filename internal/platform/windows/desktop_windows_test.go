@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/desktop"
 )
 
 type postedKeyEvent struct {
@@ -55,39 +55,6 @@ func TestTapHotkeyReleasesFirstModifierWhenSecondKeyDownFails(t *testing.T) {
 	}
 }
 
-func TestMatchesConfiguredProfiles(t *testing.T) {
-	profiles := []core.AppProfile{
-		{Name: "codex", ProcessNames: []string{"ChatGPT.exe"}, PathContains: []string{`\OpenAI.Codex_`}},
-		{Name: "browser", ProcessNames: []string{"chrome.exe", "msedge.exe"}},
-		{Name: "notes", ProcessNames: []string{"Typora.exe", "Obsidian.exe"}},
-	}
-	tests := []struct {
-		path string
-		want string
-	}{
-		{`C:\Program Files\WindowsApps\OpenAI.Codex_1.0\app\ChatGPT.exe`, "codex"},
-		{`C:\Program Files\ChatGPT\ChatGPT.exe`, "default"},
-		{`C:\Program Files\Google\Chrome\Application\CHROME.EXE`, "browser"},
-		{`C:/Program Files/Typora/Typora.exe`, "notes"},
-		{`C:\Windows\explorer.exe`, "default"},
-	}
-	for _, test := range tests {
-		if got := matchProfile(test.path, profiles); got != test.want {
-			t.Errorf("matchProfile(%q) = %q, want %q", test.path, got, test.want)
-		}
-	}
-}
-
-func TestFirstMatchingProfileWins(t *testing.T) {
-	profiles := []core.AppProfile{
-		{Name: "specific", ProcessNames: []string{"app.exe"}, PathContains: []string{"special"}},
-		{Name: "generic", ProcessNames: []string{"app.exe"}},
-	}
-	if got := matchProfile(`C:\special\app.exe`, profiles); got != "specific" {
-		t.Fatalf("got %q, want specific", got)
-	}
-}
-
 func TestProcessNameFromPathReturnsOnlyExecutableBaseName(t *testing.T) {
 	for path, want := range map[string]string{
 		`C:\Program Files\Google\Chrome\Application\chrome.exe`: "chrome.exe",
@@ -96,6 +63,38 @@ func TestProcessNameFromPathReturnsOnlyExecutableBaseName(t *testing.T) {
 	} {
 		if got := processNameFromPath(path); got != want {
 			t.Fatalf("processNameFromPath(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestLogicalPrimaryModifierUsesControlOnWindows(t *testing.T) {
+	got, err := windowsModifier(desktop.ModifierPrimary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != vkControl {
+		t.Fatalf("primary=%#x want control=%#x", got, vkControl)
+	}
+}
+
+func TestLogicalKeysUseWindowsVirtualKeys(t *testing.T) {
+	tests := map[desktop.Key]uint16{
+		desktop.KeyEscape: vkEscape, desktop.KeyArrowUp: vkUp,
+		desktop.KeyArrowDown: vkDown, desktop.KeyArrowLeft: vkLeft,
+		desktop.KeyArrowRight: vkRight, desktop.KeyBackspace: vkBackspace,
+		desktop.KeyEnter: vkEnter, desktop.KeyTab: vkTab,
+		desktop.KeyPageUp: vkPageUp, desktop.KeyPageDown: vkPageDown,
+		desktop.KeyLeftBracket: vkOEM4, desktop.KeyRightBracket: vkOEM6,
+		desktop.KeyGrave: vkOEM3, desktop.KeyF: 'F', desktop.KeyK: 'K',
+		desktop.KeyL: 'L', desktop.KeyN: 'N', desktop.KeyP: 'P', desktop.KeyT: 'T',
+	}
+	for key, want := range tests {
+		got, err := windowsKey(key)
+		if err != nil {
+			t.Fatalf("windowsKey(%q): %v", key, err)
+		}
+		if got != want {
+			t.Errorf("windowsKey(%q)=%#x want %#x", key, got, want)
 		}
 	}
 }

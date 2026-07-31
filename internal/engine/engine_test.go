@@ -80,7 +80,7 @@ func TestRunAcceptsInputFromAnyConnectedController(t *testing.T) {
 	if err := controller.Run(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(desktop.actions, []core.Action{core.MouseLeftDown, core.MouseLeftUp}) {
+	if !reflect.DeepEqual(desktop.actions, []core.Action{core.Action(core.MouseLeftDown), core.Action(core.MouseLeftUp)}) {
 		t.Fatalf("actions=%v want click from second controller", desktop.actions)
 	}
 }
@@ -122,6 +122,9 @@ func (f *fakeDesktop) Perform(action core.Action) error {
 	}
 	return f.performError
 }
+func (f *fakeDesktop) PerformOperation(operation core.Operation) error {
+	return f.Perform(core.Action(operation))
+}
 func (f *fakeDesktop) ForegroundContext() (string, string) {
 	f.contextCalls++
 	return f.profile, f.processName
@@ -133,42 +136,6 @@ type fakeTraceRecorder struct {
 
 func (f *fakeTraceRecorder) Record(observation trace.Fact) {
 	f.observations = append(f.observations, observation)
-}
-
-func TestResolveDetailedReportsBindingProvenance(t *testing.T) {
-	resolver := NewResolver(map[string]map[string]string{
-		"chrome": {
-			"a": "",
-		},
-	})
-	tests := []struct {
-		name           string
-		profile        string
-		gesture        string
-		activeProfile  string
-		bindingProfile string
-		action         core.Action
-		resolution     BindingResolution
-	}{
-		{"active profile", "chrome", "rb", "chrome", "chrome", core.TabNext, BindingBound},
-		{"default fallback", "chrome", "dpad_up", "chrome", "default", core.ArrowUp, BindingBound},
-		{"global voice submit fallback", "chrome", "voice+a", "chrome", "default", core.Enter, BindingBound},
-		{"explicitly disabled", "chrome", "a", "chrome", "chrome", "", BindingDisabled},
-		{"unbound", "chrome", "start", "chrome", "", "", BindingUnbound},
-		{"empty profile normalizes", "", "a", "default", "default", core.ClickLeft, BindingBound},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := resolver.ResolveDetailed(test.profile, test.gesture)
-			if got.ActiveProfile != test.activeProfile || got.BindingProfile != test.bindingProfile ||
-				got.Gesture != test.gesture || got.Action != test.action || got.Resolution != test.resolution {
-				t.Fatalf("resolution = %+v", got)
-			}
-		})
-	}
-	if action, found := resolver.Resolve("chrome", "a"); found || action != "" {
-		t.Fatalf("Resolve compatibility lost disabled semantics: action=%q found=%t", action, found)
-	}
 }
 
 type smoothDesktop struct {
@@ -234,7 +201,7 @@ func TestLTShouldersOverrideChromeTabs(t *testing.T) {
 	if err := engine.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, now); err != nil {
 		t.Fatal(err)
 	}
-	if len(desktop.actions) != 1 || desktop.actions[0] != core.WindowCycleNext {
+	if len(desktop.actions) != 1 || desktop.actions[0] != core.Action(core.WindowCycleNext) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
 }
@@ -257,10 +224,10 @@ func TestLTShouldersCycleMultipleWindowsUntilLTIsReleased(t *testing.T) {
 		}
 	}
 	want := []core.Action{
-		core.WindowCycleNext,
-		core.WindowCycleNext,
-		core.WindowCyclePrevious,
-		core.WindowCycleCommit,
+		core.Action(core.WindowCycleNext),
+		core.Action(core.WindowCycleNext),
+		core.Action(core.WindowCyclePrevious),
+		core.Action(core.WindowCycleCommit),
 	}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
@@ -279,7 +246,7 @@ func TestDisconnectCommitsWindowSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine.disconnect()
-	if got := desktop.actions[len(desktop.actions)-1]; got != core.WindowCycleCommit {
+	if got := desktop.actions[len(desktop.actions)-1]; got != core.Action(core.WindowCycleCommit) {
 		t.Fatalf("expected commit on disconnect, got %v", desktop.actions)
 	}
 }
@@ -328,7 +295,7 @@ func TestAHoldsLeftMouseUntilReleased(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.MouseLeftDown, core.MouseLeftUp}
+	want := []core.Action{core.Action(core.MouseLeftDown), core.Action(core.MouseLeftUp)}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -349,7 +316,7 @@ func TestCodexXUsesRightMouseInsteadOfEscape(t *testing.T) {
 	if err := engine.Step(core.State{}, 1.0/120, now.Add(time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	want := []core.Action{core.MouseRightDown, core.MouseRightUp}
+	want := []core.Action{core.Action(core.MouseRightDown), core.Action(core.MouseRightUp)}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -377,7 +344,7 @@ func TestVoiceThenASubmitsWithoutClickingInEveryProfile(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			want := []core.Action{core.VoiceTap, core.Enter}
+			want := []core.Action{core.Action(core.VoiceTap), core.Enter}
 			if !reflect.DeepEqual(desktop.actions, want) {
 				t.Fatalf("unexpected actions: %v", desktop.actions)
 			}
@@ -402,7 +369,7 @@ func TestCodexBDeletesAndKeepsVoiceSubmitArmed(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.Backspace, core.Enter}
+	want := []core.Action{core.Action(core.VoiceTap), core.Backspace, core.Enter}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -435,7 +402,7 @@ func TestVoiceSubmitIgnoresAUntilMinimumDelay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.Enter}
+	want := []core.Action{core.Action(core.VoiceTap), core.Enter}
 	if !reflect.DeepEqual(desktop.actions, want) {
 		t.Fatalf("early A should be ignored and later A should submit: %v", desktop.actions)
 	}
@@ -462,7 +429,7 @@ func TestHoldingCodexBRepeatsBackspaceUntilReleased(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.Backspace, core.Backspace, core.Backspace}
+	want := []core.Action{core.Action(core.VoiceTap), core.Backspace, core.Backspace, core.Backspace}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -500,7 +467,7 @@ func TestPointerMovementCancelsGlobalVoiceSubmit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	want := []core.Action{core.Action(core.VoiceTap), core.Action(core.MouseLeftDown), core.Action(core.MouseLeftUp)}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -532,7 +499,7 @@ func TestVoiceThenBOutsideCodexUsesNormalBindingAndClearsSubmit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.NavigateBack, core.MouseLeftDown, core.MouseLeftUp}
+	want := []core.Action{core.Action(core.VoiceTap), core.NavigateBack, core.Action(core.MouseLeftDown), core.Action(core.MouseLeftUp)}
 	if !reflect.DeepEqual(desktop.actions, want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -555,7 +522,7 @@ func TestVoiceSubmitCancelsWhenForegroundAppChangesWithinSameProfile(t *testing.
 	if err := controller.Step(core.State{}, 1.0/120, now.Add(3*time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	want := []core.Action{core.Action(core.VoiceTap), core.Action(core.MouseLeftDown), core.Action(core.MouseLeftUp)}
 	if !reflect.DeepEqual(desktop.actions, want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -581,7 +548,7 @@ func TestGlobalVoiceSubmitTimesOut(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []core.Action{core.VoiceTap, core.MouseLeftDown, core.MouseLeftUp}
+	want := []core.Action{core.Action(core.VoiceTap), core.Action(core.MouseLeftDown), core.Action(core.MouseLeftUp)}
 	if len(desktop.actions) != len(want) {
 		t.Fatalf("unexpected actions: %v", desktop.actions)
 	}
@@ -599,7 +566,7 @@ func TestDisconnectReleasesHeldMouseButton(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine.disconnect()
-	if got := desktop.actions[len(desktop.actions)-1]; got != core.MouseLeftUp {
+	if got := desktop.actions[len(desktop.actions)-1]; got != core.Action(core.MouseLeftUp) {
 		t.Fatalf("expected mouse release on disconnect, got %v", desktop.actions)
 	}
 }
@@ -785,7 +752,7 @@ func TestTraceRecordsChordButNotWindowCommit(t *testing.T) {
 		chord.ActiveProfile != "chrome" || chord.BindingProfile != "default" || chord.Outcome != trace.Success {
 		t.Fatalf("chord observation = %+v", chord)
 	}
-	if !reflect.DeepEqual(desktop.actions, []core.Action{core.WindowCycleNext, core.WindowCycleCommit}) {
+	if !reflect.DeepEqual(desktop.actions, []core.Action{core.Action(core.WindowCycleNext), core.Action(core.WindowCycleCommit)}) {
 		t.Fatalf("desktop actions = %v", desktop.actions)
 	}
 }

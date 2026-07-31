@@ -49,7 +49,10 @@ try {
         throw "Missing Windows icon: $icon"
     }
 
-    $goFiles = @(git ls-files -- "*.go")
+    $goFiles = @(
+        git ls-files --cached --others --exclude-standard -- "*.go" |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+    )
     if ($LASTEXITCODE -ne 0) {
         throw "Listing tracked Go files failed with exit code $LASTEXITCODE"
     }

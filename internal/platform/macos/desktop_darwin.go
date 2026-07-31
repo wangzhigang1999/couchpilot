@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/desktop"
 )
 
 var ErrAccessibilityPermission = errors.New("allow CouchPilot in System Settings > Privacy & Security > Accessibility, then start it again")
@@ -66,7 +67,6 @@ type voiceKeyBinding struct {
 
 type Desktop struct {
 	voiceKey               voiceKeyBinding
-	appProfiles            []core.AppProfile
 	accessibilityOK        bool
 	accessibilityCheckedAt time.Time
 	leftDown               bool
@@ -74,12 +74,14 @@ type Desktop struct {
 	windowSwitching        bool
 }
 
-func NewDesktop(voiceKey string, appProfiles []core.AppProfile) (*Desktop, error) {
+var _ desktop.SmoothDesktopDriver = (*Desktop)(nil)
+
+func NewDesktop(voiceKey string) (*Desktop, error) {
 	key, err := macVoiceKey(voiceKey)
 	if err != nil {
 		return nil, err
 	}
-	return &Desktop{voiceKey: key, appProfiles: appProfiles}, nil
+	return &Desktop{voiceKey: key}, nil
 }
 
 func (d *Desktop) Ready() error {
@@ -144,104 +146,118 @@ func scrollLines(amount int) int {
 	return lines
 }
 
-func (d *Desktop) Perform(action core.Action) error {
+func (d *Desktop) TapKey(key desktop.Key) error {
 	if err := d.ensureReady(); err != nil {
 		return err
 	}
-	switch action {
-	case core.ClickLeft:
-		return d.click(1)
-	case core.ClickRight:
-		return d.click(2)
-	case core.MouseLeftDown:
-		d.leftDown = true
-		return mouseButton(1, true)
-	case core.MouseLeftUp:
-		d.leftDown = false
-		return mouseButton(1, false)
-	case core.MouseRightDown:
-		d.rightDown = true
-		return mouseButton(2, true)
-	case core.MouseRightUp:
-		d.rightDown = false
-		return mouseButton(2, false)
-	case core.NavigateBack:
-		return tapHotkey(keyCommand, keyLeftBracket)
-	case core.Escape:
-		return tapKey(keyEscape)
-	case core.ArrowUp:
-		return tapKey(keyUp)
-	case core.ArrowDown:
-		return tapKey(keyDown)
-	case core.ArrowLeft:
-		return tapKey(keyLeft)
-	case core.ArrowRight:
-		return tapKey(keyRight)
-	case core.Backspace:
-		return tapKey(keyDelete)
-	case core.Enter:
-		return tapKey(keyReturn)
-	case core.TabPrevious:
-		return tapHotkey(keyControl, keyShift, keyTab)
-	case core.TabNext:
-		return tapHotkey(keyControl, keyTab)
-	case core.TabNew:
-		return tapHotkey(keyCommand, keyT)
-	case core.FocusLocation:
-		return tapHotkey(keyCommand, keyL)
-	case core.Find:
-		return tapHotkey(keyCommand, keyF)
-	case core.NewDocument:
-		return tapHotkey(keyCommand, keyN)
-	case core.PageUp:
-		return tapKey(keyPageUp)
-	case core.PageDown:
-		return tapKey(keyPageDown)
-	case core.CommandPalette:
-		return tapHotkey(keyCommand, keyShift, keyP)
-	case core.QuickOpen:
-		return tapHotkey(keyCommand, keyP)
-	case core.MediaPreviousTrack:
-		return mediaKey(mediaPrevious)
-	case core.MediaNextTrack:
-		return mediaKey(mediaNext)
-	case core.MediaPlayPause:
-		return mediaKey(mediaPlayPause)
-	case core.VolumeMute:
-		return mediaKey(mediaMute)
-	case core.VoiceTap:
+	keyCode, err := macKey(key)
+	if err != nil {
+		return err
+	}
+	return tapKey(keyCode)
+}
+
+func (d *Desktop) TapChord(modifiers []desktop.Modifier, key desktop.Key) error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	keys := make([]uint16, 0, len(modifiers)+1)
+	for _, modifier := range modifiers {
+		keyCode, err := macModifier(modifier)
+		if err != nil {
+			return err
+		}
+		keys = append(keys, keyCode)
+	}
+	keyCode, err := macKey(key)
+	if err != nil {
+		return err
+	}
+	return tapHotkey(append(keys, keyCode)...)
+}
+
+func (d *Desktop) Mouse(button desktop.MouseButton, state desktop.ButtonState) error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	buttonNumber := 1
+	if button == desktop.MouseRight {
+		buttonNumber = 2
+	} else if button != desktop.MouseLeft {
+		return fmt.Errorf("unsupported macOS mouse button %q", button)
+	}
+	down := state == desktop.ButtonDown
+	if !down && state != desktop.ButtonUp {
+		return fmt.Errorf("unsupported macOS mouse state %q", state)
+	}
+	if button == desktop.MouseLeft {
+		d.leftDown = down
+	} else {
+		d.rightDown = down
+	}
+	return mouseButton(buttonNumber, down)
+}
+
+func (d *Desktop) NavigateBack() error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	return tapHotkey(keyCommand, keyLeftBracket)
+}
+
+func (d *Desktop) SwitchWindow(direction desktop.Direction) error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	if direction == desktop.Previous {
+		return tapHotkey(keyCommand, keyShift, keyTab)
+	}
+	return tapHotkey(keyCommand, keyTab)
+}
+
+func (d *Desktop) CycleWindow(direction desktop.Direction) error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	return d.cycleWindow(direction == desktop.Previous)
+}
+
+func (d *Desktop) CommitWindowSwitch() error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	return d.commitWindowSwitch()
+}
+
+func (d *Desktop) Voice(event desktop.VoiceEvent) error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	switch event {
+	case desktop.VoiceTap:
 		if err := voiceKeyEvent(d.voiceKey, true); err != nil {
 			return err
 		}
 		time.Sleep(55 * time.Millisecond)
 		return voiceKeyEvent(d.voiceKey, false)
-	case core.VoiceDown:
+	case desktop.VoiceDown:
 		return voiceKeyEvent(d.voiceKey, true)
-	case core.VoiceUp:
+	case desktop.VoiceUp:
 		return voiceKeyEvent(d.voiceKey, false)
-	case core.WindowPrevious:
-		return tapHotkey(keyCommand, keyShift, keyTab)
-	case core.WindowNext:
-		return tapHotkey(keyCommand, keyTab)
-	case core.WindowCyclePrevious:
-		return d.cycleWindow(true)
-	case core.WindowCycleNext:
-		return d.cycleWindow(false)
-	case core.WindowCycleCommit:
-		return d.commitWindowSwitch()
-	case core.CodexBack:
-		return tapHotkey(keyCommand, keyLeftBracket)
-	case core.CodexPreviousTask:
-		return tapHotkey(keyCommand, keyShift, keyLeftBracket)
-	case core.CodexNextTask:
-		return tapHotkey(keyCommand, keyShift, keyRightBracket)
-	case core.CodexCommandMenu:
-		return tapHotkey(keyCommand, keyK)
-	case core.CodexTerminal:
-		return tapHotkey(keyCommand, keyGrave)
 	default:
-		return fmt.Errorf("unsupported macOS action %q", action)
+		return fmt.Errorf("unsupported macOS voice event %q", event)
 	}
+}
+
+func (d *Desktop) Media(key desktop.MediaKey) error {
+	if err := d.ensureReady(); err != nil {
+		return err
+	}
+	value, err := macMediaKey(key)
+	if err != nil {
+		return err
+	}
+	return mediaKey(value)
 }
 
 func (d *Desktop) ensureReady() error {
@@ -259,24 +275,17 @@ func (d *Desktop) ensureReady() error {
 	return nil
 }
 
-func (d *Desktop) ForegroundContext() (string, string) {
+func (d *Desktop) ForegroundApplication() core.AppIdentity {
 	buffer := C.malloc(4096)
 	if buffer == nil {
-		return "default", ""
+		return core.AppIdentity{}
 	}
 	defer C.free(buffer)
 	if C.cp_frontmost_executable((*C.char)(buffer), 4096) < 0 {
-		return "default", ""
+		return core.AppIdentity{}
 	}
 	path := C.GoString((*C.char)(buffer))
-	return matchProfile(path, d.appProfiles), filepath.Base(path)
-}
-
-func (d *Desktop) click(button int) error {
-	if err := mouseButton(button, true); err != nil {
-		return err
-	}
-	return mouseButton(button, false)
+	return core.AppIdentity{ProcessName: filepath.Base(path), ExecutablePath: path}
 }
 
 func (d *Desktop) cycleWindow(previous bool) error {
@@ -448,35 +457,45 @@ func macVoiceKey(name string) (voiceKeyBinding, error) {
 	}
 }
 
-func matchProfile(path string, profiles []core.AppProfile) string {
-	normalized := strings.ToLower(filepath.ToSlash(path))
-	processName := strings.ToLower(filepath.Base(normalized))
-	for _, profile := range profiles {
-		if !matchesAny(processName, profile.ProcessNames, func(value, candidate string) bool {
-			candidate = strings.ToLower(strings.TrimSuffix(candidate, ".exe"))
-			return value == candidate
-		}) {
-			continue
-		}
-		if !matchesAny(normalized, profile.PathContains, func(value, candidate string) bool {
-			candidate = strings.ToLower(strings.ReplaceAll(candidate, `\`, "/"))
-			return strings.Contains(value, candidate)
-		}) {
-			continue
-		}
-		return profile.Name
+func macKey(key desktop.Key) (uint16, error) {
+	keys := map[desktop.Key]uint16{
+		desktop.KeyEscape: keyEscape, desktop.KeyArrowUp: keyUp,
+		desktop.KeyArrowDown: keyDown, desktop.KeyArrowLeft: keyLeft,
+		desktop.KeyArrowRight: keyRight, desktop.KeyBackspace: keyDelete,
+		desktop.KeyEnter: keyReturn, desktop.KeyTab: keyTab,
+		desktop.KeyPageUp: keyPageUp, desktop.KeyPageDown: keyPageDown,
+		desktop.KeyLeftBracket: keyLeftBracket, desktop.KeyRightBracket: keyRightBracket,
+		desktop.KeyGrave: keyGrave, desktop.KeyF: keyF, desktop.KeyK: keyK,
+		desktop.KeyL: keyL, desktop.KeyN: keyN, desktop.KeyP: keyP, desktop.KeyT: keyT,
 	}
-	return "default"
+	if keyCode, ok := keys[key]; ok {
+		return keyCode, nil
+	}
+	return 0, fmt.Errorf("unsupported macOS key %q", key)
 }
 
-func matchesAny(value string, candidates []string, match func(string, string) bool) bool {
-	if len(candidates) == 0 {
-		return true
+func macModifier(modifier desktop.Modifier) (uint16, error) {
+	switch modifier {
+	case desktop.ModifierPrimary:
+		return keyCommand, nil
+	case desktop.ModifierControl:
+		return keyControl, nil
+	case desktop.ModifierShift:
+		return keyShift, nil
+	default:
+		return 0, fmt.Errorf("unsupported macOS modifier %q", modifier)
 	}
-	for _, candidate := range candidates {
-		if match(value, candidate) {
-			return true
-		}
+}
+
+func macMediaKey(key desktop.MediaKey) (int, error) {
+	keys := map[desktop.MediaKey]int{
+		desktop.MediaPrevious:  mediaPrevious,
+		desktop.MediaNext:      mediaNext,
+		desktop.MediaPlayPause: mediaPlayPause,
+		desktop.MediaMute:      mediaMute,
 	}
-	return false
+	if value, ok := keys[key]; ok {
+		return value, nil
+	}
+	return 0, fmt.Errorf("unsupported macOS media key %q", key)
 }
