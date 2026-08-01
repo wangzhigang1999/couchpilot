@@ -164,16 +164,22 @@ To check which profile CouchPilot sees for the foreground app, focus that app an
 ## Architecture
 
 - `cmd/couchpilot`: process supervision; native UI stays on the main thread and the engine runs as a worker.
-- `internal/core`: platform-neutral semantic device state, actions and narrow capability interfaces.
-- `internal/engine`: pointer/scroll math, edge detection, profiles and binding resolution.
+- `internal/core`: stable platform-neutral device state, semantic actions and narrow runtime interfaces.
+- `internal/mapping`: built-in bindings, user overrides, fallback rules and foreground-app profile matching.
+- `internal/desktop`: the single semantic-action executor. It expands actions into logical keys, chords and the few operations that genuinely need OS-specific behavior.
+- `internal/engine`: the controller runtime, split into device selection, pointer/scroll processing, gesture dispatch, voice/window sessions and runtime diagnostics.
 - `internal/trace`: append-only local JSONL diagnostics.
-- `internal/platform/windows`: XInput and Windows desktop output.
-- `internal/platform/macos`: GameController/IOHID input and CoreGraphics desktop output.
-- `internal/platform`: independent gamepad and desktop factories; diagnostics do not initialize unrelated adapters.
+- `internal/platform/windows`: XInput plus translation of logical desktop operations to Windows input.
+- `internal/platform/macos`: GameController/IOHID plus translation of logical desktop operations to CoreGraphics.
+- `internal/platform`: build-tagged composition root that wraps a platform driver with the shared action executor and profile matcher.
 - `internal/tray`: a shared lifecycle contract with native Windows and macOS implementations.
 - `internal/config`: versioned JSON schema shared by the CLI and future UI.
 
-This is intentionally an adapter boundary, not a plugin framework. Additional gamepads or desktop platforms can be added without changing the mapping engine.
+This is intentionally an adapter boundary, not a plugin framework. A new
+desktop platform implements logical key/chord translation, mouse, voice,
+media, window switching and foreground-app discovery, then registers those
+drivers in a build-tagged factory. Binding profiles and ordinary shortcut
+actions do not need to be copied into the new adapter.
 
 ## Build
 

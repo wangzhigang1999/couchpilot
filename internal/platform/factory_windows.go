@@ -4,6 +4,7 @@ package platform
 
 import (
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/desktop"
 	winplatform "github.com/wangzhigang1999/couchpilot/internal/platform/windows"
 )
 
@@ -12,5 +13,9 @@ func NewGamepad() (core.Gamepad, error) {
 }
 
 func NewDesktop(voiceKey string, appProfiles []core.AppProfile) (core.Desktop, error) {
-	return winplatform.NewDesktop(voiceKey, appProfiles)
+	driver, err := winplatform.NewDesktop(voiceKey)
+	if err != nil {
+		return nil, err
+	}
+	return desktop.NewExecutor(driver, appProfiles), nil
 }

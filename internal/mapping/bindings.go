@@ -1,4 +1,4 @@
-package engine
+package mapping
 
 import "github.com/wangzhigang1999/couchpilot/internal/core"
 
@@ -14,9 +14,8 @@ type Resolver struct {
 	bindings map[string]map[string]string
 }
 
-// ResolvedBinding describes both what the active profile requested and which
-// profile actually supplied the binding. Keeping those labels distinct makes
-// default-profile fallbacks visible without changing resolution behavior.
+// ResolvedBinding keeps the active profile separate from the profile that
+// supplied a fallback, which makes mapping behavior observable in traces.
 type ResolvedBinding struct {
 	ActiveProfile  string
 	BindingProfile string

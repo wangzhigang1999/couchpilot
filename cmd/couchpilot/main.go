@@ -220,7 +220,7 @@ func run(options options) error {
 		go watchStopFile(ctx, stopRequest, cancel)
 	}
 	paths := daemon.RuntimePaths(options.configPath)
-	controller := engine.New(settings, gamepad, desktop, options.verbose, os.Stdout)
+	controller := engine.NewWithOptions(engine.OptionsFromSettings(settings), gamepad, desktop, options.verbose, os.Stdout)
 	var traceRecorder *trace.Recorder
 	if settings.LocalTraceEnabled {
 		traceRecorder, err = trace.Open(trace.Options{

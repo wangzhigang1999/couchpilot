@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/desktop"
 	winapi "golang.org/x/sys/windows"
 )
 
@@ -92,16 +93,17 @@ var (
 
 type Desktop struct {
 	voiceVirtualKey uint16
-	appProfiles     []core.AppProfile
 	windowSwitching bool
 }
 
-func NewDesktop(voiceKey string, appProfiles []core.AppProfile) (*Desktop, error) {
+var _ desktop.Driver = (*Desktop)(nil)
+
+func NewDesktop(voiceKey string) (*Desktop, error) {
 	key, err := virtualKey(voiceKey)
 	if err != nil {
 		return nil, err
 	}
-	return &Desktop{voiceVirtualKey: key, appProfiles: appProfiles}, nil
+	return &Desktop{voiceVirtualKey: key}, nil
 }
 
 func (d *Desktop) MovePointer(dx, dy int) error {
@@ -121,97 +123,80 @@ func (d *Desktop) Scroll(amount int) error {
 	return sendMouse(mouseInputData{MouseData: uint32(amount), Flags: mouseWheel})
 }
 
-func (d *Desktop) Perform(action core.Action) error {
-	switch action {
-	case core.ClickLeft:
-		return d.click(false)
-	case core.ClickRight:
-		return d.click(true)
-	case core.MouseLeftDown:
-		return sendMouse(mouseInputData{Flags: mouseLeftDown})
-	case core.MouseLeftUp:
-		return sendMouse(mouseInputData{Flags: mouseLeftUp})
-	case core.MouseRightDown:
-		return sendMouse(mouseInputData{Flags: mouseRightDown})
-	case core.MouseRightUp:
-		return sendMouse(mouseInputData{Flags: mouseRightUp})
-	case core.NavigateBack:
-		return tapHotkey(vkAlt, vkLeft)
-	case core.Escape:
-		return tapKey(vkEscape, 25*time.Millisecond)
-	case core.ArrowUp:
-		return tapKey(vkUp, 25*time.Millisecond)
-	case core.ArrowDown:
-		return tapKey(vkDown, 25*time.Millisecond)
-	case core.ArrowLeft:
-		return tapKey(vkLeft, 25*time.Millisecond)
-	case core.ArrowRight:
-		return tapKey(vkRight, 25*time.Millisecond)
-	case core.Backspace:
-		return tapKey(vkBackspace, 25*time.Millisecond)
-	case core.Enter:
-		return tapKey(vkEnter, 25*time.Millisecond)
-	case core.TabPrevious:
-		return tapHotkey(vkControl, vkShift, vkTab)
-	case core.TabNext:
-		return tapHotkey(vkControl, vkTab)
-	case core.TabNew:
-		return tapHotkey(vkControl, uint16('T'))
-	case core.FocusLocation:
-		return tapHotkey(vkControl, uint16('L'))
-	case core.Find:
-		return tapHotkey(vkControl, uint16('F'))
-	case core.NewDocument:
-		return tapHotkey(vkControl, uint16('N'))
-	case core.PageUp:
-		return tapKey(vkPageUp, 25*time.Millisecond)
-	case core.PageDown:
-		return tapKey(vkPageDown, 25*time.Millisecond)
-	case core.CommandPalette:
-		return tapHotkey(vkControl, vkShift, uint16('P'))
-	case core.QuickOpen:
-		return tapHotkey(vkControl, uint16('P'))
-	case core.MediaPreviousTrack:
-		return tapKey(vkMediaPreviousTrack, 25*time.Millisecond)
-	case core.MediaNextTrack:
-		return tapKey(vkMediaNextTrack, 25*time.Millisecond)
-	case core.MediaPlayPause:
-		return tapKey(vkMediaPlayPause, 25*time.Millisecond)
-	case core.VolumeMute:
-		return tapKey(vkVolumeMute, 25*time.Millisecond)
-	case core.VoiceTap:
+func (d *Desktop) TapKey(key desktop.Key) error {
+	virtualKey, err := windowsKey(key)
+	if err != nil {
+		return err
+	}
+	return tapKey(virtualKey, 25*time.Millisecond)
+}
+
+func (d *Desktop) TapChord(modifiers []desktop.Modifier, key desktop.Key) error {
+	keys := make([]uint16, 0, len(modifiers)+1)
+	for _, modifier := range modifiers {
+		virtualKey, err := windowsModifier(modifier)
+		if err != nil {
+			return err
+		}
+		keys = append(keys, virtualKey)
+	}
+	virtualKey, err := windowsKey(key)
+	if err != nil {
+		return err
+	}
+	return tapHotkey(append(keys, virtualKey)...)
+}
+
+func (d *Desktop) Mouse(button desktop.MouseButton, state desktop.ButtonState) error {
+	flags, err := windowsMouseFlags(button, state)
+	if err != nil {
+		return err
+	}
+	return sendMouse(mouseInputData{Flags: flags})
+}
+
+func (d *Desktop) NavigateBack() error {
+	return tapHotkey(vkAlt, vkLeft)
+}
+
+func (d *Desktop) SwitchWindow(direction desktop.Direction) error {
+	if direction == desktop.Previous {
+		return tapHotkey(vkAlt, vkShift, vkTab)
+	}
+	return tapHotkey(vkAlt, vkTab)
+}
+
+func (d *Desktop) CycleWindow(direction desktop.Direction) error {
+	return d.cycleWindow(direction == desktop.Previous)
+}
+
+func (d *Desktop) CommitWindowSwitch() error {
+	return d.commitWindowSwitch()
+}
+
+func (d *Desktop) Voice(event desktop.VoiceEvent) error {
+	switch event {
+	case desktop.VoiceTap:
 		if err := physicalKeyEvent(d.voiceVirtualKey, true); err != nil {
 			return err
 		}
 		time.Sleep(55 * time.Millisecond)
 		return physicalKeyEvent(d.voiceVirtualKey, false)
-	case core.VoiceDown:
+	case desktop.VoiceDown:
 		return physicalKeyEvent(d.voiceVirtualKey, true)
-	case core.VoiceUp:
+	case desktop.VoiceUp:
 		return physicalKeyEvent(d.voiceVirtualKey, false)
-	case core.WindowPrevious:
-		return tapHotkey(vkAlt, vkShift, vkTab)
-	case core.WindowNext:
-		return tapHotkey(vkAlt, vkTab)
-	case core.WindowCyclePrevious:
-		return d.cycleWindow(true)
-	case core.WindowCycleNext:
-		return d.cycleWindow(false)
-	case core.WindowCycleCommit:
-		return d.commitWindowSwitch()
-	case core.CodexBack:
-		return tapHotkey(vkControl, vkOEM4)
-	case core.CodexPreviousTask:
-		return tapHotkey(vkControl, vkShift, vkOEM4)
-	case core.CodexNextTask:
-		return tapHotkey(vkControl, vkShift, vkOEM6)
-	case core.CodexCommandMenu:
-		return tapHotkey(vkControl, uint16('K'))
-	case core.CodexTerminal:
-		return tapHotkey(vkControl, vkOEM3)
 	default:
-		return fmt.Errorf("unsupported Windows action %q", action)
+		return fmt.Errorf("unsupported Windows voice event %q", event)
 	}
+}
+
+func (d *Desktop) Media(key desktop.MediaKey) error {
+	virtualKey, err := windowsMediaKey(key)
+	if err != nil {
+		return err
+	}
+	return tapKey(virtualKey, 25*time.Millisecond)
 }
 
 func (d *Desktop) cycleWindow(previous bool) error {
@@ -247,23 +232,12 @@ func (d *Desktop) commitWindowSwitch() error {
 	return keyEvent(vkAlt, false)
 }
 
-func (d *Desktop) ForegroundContext() (string, string) {
+func (d *Desktop) ForegroundApplication() core.AppIdentity {
 	path, err := foregroundProcessPath()
 	if err != nil {
-		return "default", ""
+		return core.AppIdentity{}
 	}
-	return matchProfile(path, d.appProfiles), processNameFromPath(path)
-}
-
-func (d *Desktop) click(right bool) error {
-	down, up := uint32(mouseLeftDown), uint32(mouseLeftUp)
-	if right {
-		down, up = mouseRightDown, mouseRightUp
-	}
-	if err := sendMouse(mouseInputData{Flags: down}); err != nil {
-		return err
-	}
-	return sendMouse(mouseInputData{Flags: up})
+	return core.AppIdentity{ProcessName: processNameFromPath(path), ExecutablePath: path}
 }
 
 func sendMouse(data mouseInputData) error {
@@ -391,25 +365,6 @@ func foregroundProcessPath() (string, error) {
 	return winapi.UTF16ToString(buffer[:size]), nil
 }
 
-func matchProfile(path string, profiles []core.AppProfile) string {
-	normalized := strings.ToLower(strings.ReplaceAll(path, "/", `\`))
-	processName := strings.ToLower(processNameFromPath(path))
-	for _, profile := range profiles {
-		if !matchesAny(processName, profile.ProcessNames, func(value, candidate string) bool {
-			return value == strings.ToLower(candidate)
-		}) {
-			continue
-		}
-		if !matchesAny(normalized, profile.PathContains, func(value, candidate string) bool {
-			return strings.Contains(value, strings.ToLower(strings.ReplaceAll(candidate, "/", `\`)))
-		}) {
-			continue
-		}
-		return profile.Name
-	}
-	return "default"
-}
-
 func processNameFromPath(path string) string {
 	normalized := strings.ReplaceAll(path, "/", `\`)
 	if index := strings.LastIndex(normalized, `\`); index >= 0 {
@@ -418,16 +373,56 @@ func processNameFromPath(path string) string {
 	return normalized
 }
 
-func matchesAny(value string, candidates []string, match func(string, string) bool) bool {
-	if len(candidates) == 0 {
-		return true
+func windowsKey(key desktop.Key) (uint16, error) {
+	keys := map[desktop.Key]uint16{
+		desktop.KeyEscape: vkEscape, desktop.KeyArrowUp: vkUp,
+		desktop.KeyArrowDown: vkDown, desktop.KeyArrowLeft: vkLeft,
+		desktop.KeyArrowRight: vkRight, desktop.KeyBackspace: vkBackspace,
+		desktop.KeyEnter: vkEnter, desktop.KeyTab: vkTab,
+		desktop.KeyPageUp: vkPageUp, desktop.KeyPageDown: vkPageDown,
+		desktop.KeyLeftBracket: vkOEM4, desktop.KeyRightBracket: vkOEM6,
+		desktop.KeyGrave: vkOEM3, desktop.KeyF: 'F', desktop.KeyK: 'K',
+		desktop.KeyL: 'L', desktop.KeyN: 'N', desktop.KeyP: 'P', desktop.KeyT: 'T',
 	}
-	for _, candidate := range candidates {
-		if match(value, candidate) {
-			return true
-		}
+	if virtualKey, ok := keys[key]; ok {
+		return virtualKey, nil
 	}
-	return false
+	return 0, fmt.Errorf("unsupported Windows key %q", key)
+}
+
+func windowsModifier(modifier desktop.Modifier) (uint16, error) {
+	switch modifier {
+	case desktop.ModifierPrimary, desktop.ModifierControl:
+		return vkControl, nil
+	case desktop.ModifierShift:
+		return vkShift, nil
+	default:
+		return 0, fmt.Errorf("unsupported Windows modifier %q", modifier)
+	}
+}
+
+func windowsMouseFlags(button desktop.MouseButton, state desktop.ButtonState) (uint32, error) {
+	flags := map[desktop.MouseButton]map[desktop.ButtonState]uint32{
+		desktop.MouseLeft:  {desktop.ButtonDown: mouseLeftDown, desktop.ButtonUp: mouseLeftUp},
+		desktop.MouseRight: {desktop.ButtonDown: mouseRightDown, desktop.ButtonUp: mouseRightUp},
+	}
+	if value, ok := flags[button][state]; ok {
+		return value, nil
+	}
+	return 0, fmt.Errorf("unsupported Windows mouse event %q %q", button, state)
+}
+
+func windowsMediaKey(key desktop.MediaKey) (uint16, error) {
+	keys := map[desktop.MediaKey]uint16{
+		desktop.MediaPrevious:  vkMediaPreviousTrack,
+		desktop.MediaNext:      vkMediaNextTrack,
+		desktop.MediaPlayPause: vkMediaPlayPause,
+		desktop.MediaMute:      vkVolumeMute,
+	}
+	if virtualKey, ok := keys[key]; ok {
+		return virtualKey, nil
+	}
+	return 0, fmt.Errorf("unsupported Windows media key %q", key)
 }
 
 func callError(name string, err error) error {

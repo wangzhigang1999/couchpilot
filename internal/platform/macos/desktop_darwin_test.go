@@ -8,26 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/desktop"
 )
-
-func TestMatchesMacProfiles(t *testing.T) {
-	profiles := []core.AppProfile{
-		{Name: "codex", ProcessNames: []string{"Codex", "ChatGPT.exe"}, PathContains: []string{"Codex.app", "ChatGPT.app", "OpenAI.Codex_"}},
-		{Name: "chrome", ProcessNames: []string{"Google Chrome", "chrome.exe"}},
-	}
-	tests := []struct{ path, want string }{
-		{"/Applications/Codex.app/Contents/MacOS/Codex", "codex"},
-		{"/Applications/ChatGPT.app/Contents/MacOS/ChatGPT", "codex"},
-		{"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "chrome"},
-		{"/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", "default"},
-	}
-	for _, test := range tests {
-		if got := matchProfile(test.path, profiles); got != test.want {
-			t.Errorf("matchProfile(%q)=%q want %q", test.path, got, test.want)
-		}
-	}
-}
 
 func TestFlagsForModifiers(t *testing.T) {
 	if got := flagsForModifiers([]uint16{keyCommand, keyShift}); got != flagCommand|flagShift {
@@ -38,6 +20,38 @@ func TestFlagsForModifiers(t *testing.T) {
 	}
 	if got := flagsForModifiers([]uint16{keyRightOption}); got != flagOption {
 		t.Fatalf("right option flags=%#x", got)
+	}
+}
+
+func TestLogicalPrimaryModifierUsesCommandOnMac(t *testing.T) {
+	got, err := macModifier(desktop.ModifierPrimary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != keyCommand {
+		t.Fatalf("primary=%#x want command=%#x", got, keyCommand)
+	}
+}
+
+func TestLogicalKeysUseMacKeyCodes(t *testing.T) {
+	tests := map[desktop.Key]uint16{
+		desktop.KeyEscape: keyEscape, desktop.KeyArrowUp: keyUp,
+		desktop.KeyArrowDown: keyDown, desktop.KeyArrowLeft: keyLeft,
+		desktop.KeyArrowRight: keyRight, desktop.KeyBackspace: keyDelete,
+		desktop.KeyEnter: keyReturn, desktop.KeyTab: keyTab,
+		desktop.KeyPageUp: keyPageUp, desktop.KeyPageDown: keyPageDown,
+		desktop.KeyLeftBracket: keyLeftBracket, desktop.KeyRightBracket: keyRightBracket,
+		desktop.KeyGrave: keyGrave, desktop.KeyF: keyF, desktop.KeyK: keyK,
+		desktop.KeyL: keyL, desktop.KeyN: keyN, desktop.KeyP: keyP, desktop.KeyT: keyT,
+	}
+	for key, want := range tests {
+		got, err := macKey(key)
+		if err != nil {
+			t.Fatalf("macKey(%q): %v", key, err)
+		}
+		if got != want {
+			t.Errorf("macKey(%q)=%#x want %#x", key, got, want)
+		}
 	}
 }
 

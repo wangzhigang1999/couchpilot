@@ -4,6 +4,7 @@ package platform
 
 import (
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/desktop"
 	macplatform "github.com/wangzhigang1999/couchpilot/internal/platform/macos"
 )
 
@@ -12,5 +13,9 @@ func NewGamepad() (core.Gamepad, error) {
 }
 
 func NewDesktop(voiceKey string, appProfiles []core.AppProfile) (core.Desktop, error) {
-	return macplatform.NewDesktop(voiceKey, appProfiles)
+	driver, err := macplatform.NewDesktop(voiceKey)
+	if err != nil {
+		return nil, err
+	}
+	return desktop.NewSmoothExecutor(driver, appProfiles), nil
 }
