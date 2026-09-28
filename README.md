@@ -155,6 +155,8 @@ Set an action to an empty string to disable that exact binding. Run the followin
 
 The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` is the global contextual Enter gesture after Y; `voice+b` remains Codex's contextual, repeatable Backspace. The supplied `config.json` contains the editable Codex and Chrome profiles; all other apps use the `default` bindings.
 
+Only one trigger prefix is supported; `voice+a` and `voice+b` are separate sequences and cannot take an additional prefix. Back and Start are reserved for emergency exit. Unsupported gesture names are rejected when loading configuration instead of silently doing nothing. Custom `voice+b` actions follow normal action semantics: mouse clicks can be held, voice respects `voice_mode`, and only Backspace auto-repeats. Switching apps cancels the voice sequence even while the gamepad is idle; returning to the original app does not restore it.
+
 To check which profile CouchPilot sees for the foreground app, focus that app and run:
 
 ```powershell
@@ -168,6 +170,7 @@ To check which profile CouchPilot sees for the foreground app, focus that app an
 - `internal/mapping`: built-in bindings, user overrides, fallback rules and foreground-app profile matching.
 - `internal/desktop`: the single semantic-action executor. It expands actions into logical keys, chords and the few operations that genuinely need OS-specific behavior.
 - `internal/engine`: the controller runtime, split into device selection, pointer/scroll processing, gesture dispatch, voice/window sessions and runtime diagnostics.
+- `cmd/couchpilot`: application assembly, including conversion from persisted settings to the engine's runtime options. The engine does not import `internal/config`.
 - `internal/trace`: append-only local JSONL diagnostics.
 - `internal/platform/windows`: XInput plus translation of logical desktop operations to Windows input.
 - `internal/platform/macos`: GameController/IOHID plus translation of logical desktop operations to CoreGraphics.

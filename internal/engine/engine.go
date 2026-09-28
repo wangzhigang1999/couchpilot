@@ -15,8 +15,8 @@ import (
 var ErrExitRequested = errors.New("emergency exit requested")
 
 const (
-	composeDeleteRepeatDelay    = 320 * time.Millisecond
-	composeDeleteRepeatInterval = 75 * time.Millisecond
+	backspaceRepeatDelay    = 320 * time.Millisecond
+	backspaceRepeatInterval = 75 * time.Millisecond
 )
 
 type Engine struct {
@@ -36,7 +36,6 @@ type Engine struct {
 	previousRightTrigger bool
 	previousLeftStick    bool
 	previousRightStick   bool
-	voiceHeld            core.Button
 	exitComboStarted     time.Time
 	exitComboRecorded    bool
 	rumbleUntil          time.Time
@@ -44,15 +43,8 @@ type Engine struct {
 	rumbleRight          uint16
 	rumbleSentLeft       uint16
 	rumbleSentRight      uint16
-	windowSwitching      bool
-	composeProfile       string
-	composeForegroundApp string
-	composeReadyAt       time.Time
-	composeUntil         time.Time
-	repeatButton         core.Button
-	repeatAction         core.Action
-	repeatNext           time.Time
-	heldActions          map[core.Button]core.Operation
+	compose              composeSession
+	held                 heldSession
 	scrollRemainder      float64
 	smoothScrollVelocity float64
 	smoothScrollActive   bool
@@ -62,19 +54,19 @@ type Engine struct {
 	frameProcessName     string
 }
 
-func NewWithOptions(options Options, gamepad core.Gamepad, desktop core.Desktop, verbose bool, output io.Writer) *Engine {
+func New(options Options, gamepad core.Gamepad, desktop core.Desktop, verbose bool, output io.Writer) *Engine {
 	if output == nil {
 		output = io.Discard
 	}
 	result := &Engine{
-		options:     options,
-		gamepad:     gamepad,
-		desktop:     desktop,
-		clock:       core.RealClock{},
-		resolver:    mapping.NewResolver(options.Bindings),
-		logger:      log.New(output, "", log.LstdFlags),
-		verbose:     verbose,
-		heldActions: make(map[core.Button]core.Operation),
+		options:  options,
+		gamepad:  gamepad,
+		desktop:  desktop,
+		clock:    core.RealClock{},
+		resolver: mapping.NewResolver(options.Bindings),
+		logger:   log.New(output, "", log.LstdFlags),
+		verbose:  verbose,
+		held:     heldSession{mouse: make(map[core.Button]core.Operation)},
 	}
 	result.smoothScroller, _ = desktop.(core.SmoothScroller)
 	return result
@@ -85,11 +77,15 @@ func (e *Engine) SetTraceSink(sink trace.Sink) {
 	e.traceSink = sink
 }
 
-func (e *Engine) Run(ctx context.Context) error {
+func (e *Engine) Run(ctx context.Context) (runErr error) {
 	e.logger.Printf("gamepad: waiting for input")
 	e.logger.Printf("emergency exit: hold Back + Start for %.1f seconds", e.options.ExitHoldSeconds)
 	last := e.clock.Now()
-	defer e.shutdown()
+	defer func() {
+		if cleanupErr := e.shutdown(); cleanupErr != nil {
+			runErr = errors.Join(runErr, cleanupErr)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,7 +127,9 @@ func (e *Engine) Run(ctx context.Context) error {
 		}
 		if !connected {
 			e.logger.Printf("controller disconnected; waiting for reconnect")
-			e.disconnect()
+			if err := e.disconnect(); err != nil {
+				return err
+			}
 			e.clock.Sleep(500 * time.Millisecond)
 			continue
 		}
@@ -139,7 +137,9 @@ func (e *Engine) Run(ctx context.Context) error {
 			return err
 		} else if found {
 			previous := e.device
-			e.disconnect()
+			if err := e.disconnect(); err != nil {
+				return err
+			}
 			e.device = device
 			e.logger.Printf("controller %s took over from %s", device, previous)
 			e.pulseHaptic(28000, 20000, 120*time.Millisecond)
@@ -163,10 +163,16 @@ func (e *Engine) Step(state core.State, dt float64, now time.Time) error {
 	defer func() { e.previousButtons = state.Buttons }()
 	e.frameContextLoaded = false
 	e.expireCompose(now)
+	// Observe app changes even when the controller is idle. The frame cache
+	// keeps this to one context lookup per frame, only while composing.
+	if e.compose.profile != "" {
+		profile, foregroundApp := e.foregroundContext()
+		e.composeActive(profile, foregroundApp, now)
+	}
 	leftTriggerWasActive := e.previousLeftTrigger
 	e.logEdges(state, now)
 	e.observeStickEdges(state, now)
-	if leftTriggerWasActive && state.LeftTrigger <= 0.08 && e.windowSwitching {
+	if leftTriggerWasActive && state.LeftTrigger <= 0.08 && e.held.windowSwitching {
 		if err := e.finishWindowSwitch(); err != nil {
 			return err
 		}

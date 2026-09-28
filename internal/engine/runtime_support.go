@@ -177,26 +177,19 @@ func (e *Engine) pulseHaptic(left, right uint16, duration time.Duration) {
 	e.rumbleUntil = e.clock.Now().Add(duration)
 }
 
-func (e *Engine) disconnect() {
+func (e *Engine) disconnect() error {
 	if e.smoothScrollActive && e.smoothScroller != nil {
 		_ = e.smoothScroller.ScrollSmooth(0, core.SmoothScrollEnded)
 	}
 	e.smoothScrollActive = false
 	e.smoothScrollVelocity = 0
-	e.releaseAllHeldActions()
+	releaseErr := e.releaseInputs()
 	e.clearCompose("disconnect")
-	if e.windowSwitching {
-		_ = e.finishWindowSwitch()
-	}
-	if e.voiceHeld != 0 {
-		_ = e.voiceReleased()
-	}
 	if e.device != "" {
 		_ = e.gamepad.Rumble(e.device, 0, 0)
 	}
 	e.device = ""
 	e.previousButtons = 0
-	e.voiceHeld = 0
 	e.previousLeftTrigger = false
 	e.previousRightTrigger = false
 	e.previousLeftStick = false
@@ -206,8 +199,9 @@ func (e *Engine) disconnect() {
 	e.rumbleLeft, e.rumbleRight = 0, 0
 	e.rumbleSentLeft, e.rumbleSentRight = 0, 0
 	e.rumbleUntil = time.Time{}
+	return releaseErr
 }
 
-func (e *Engine) shutdown() {
-	e.disconnect()
+func (e *Engine) shutdown() error {
+	return e.disconnect()
 }

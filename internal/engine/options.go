@@ -1,12 +1,5 @@
 package engine
 
-import (
-	"io"
-
-	"github.com/wangzhigang1999/couchpilot/internal/config"
-	"github.com/wangzhigang1999/couchpilot/internal/core"
-)
-
 // Options is the engine's runtime configuration. Persistence-only concerns,
 // including app matching and trace file policy, stay outside the engine.
 type Options struct {
@@ -26,30 +19,4 @@ type Options struct {
 	HapticStrength             float64
 	ExitHoldSeconds            float64
 	Bindings                   map[string]map[string]string
-}
-
-func OptionsFromSettings(settings config.Settings) Options {
-	return Options{
-		DeviceID:                   settings.DeviceID,
-		ControllerIndex:            settings.ControllerIndex,
-		PollHz:                     settings.PollHz,
-		Deadzone:                   settings.Deadzone,
-		PointerMaxSpeed:            settings.PointerMaxSpeed,
-		PointerCurve:               settings.PointerCurve,
-		PrecisionSpeedMultiplier:   settings.PrecisionSpeedMultiplier,
-		BoostSpeedMultiplier:       settings.BoostSpeedMultiplier,
-		ScrollUnitsPerSecond:       settings.ScrollUnitsPerSecond,
-		VoiceMode:                  settings.VoiceMode,
-		VoiceSubmitMinDelaySeconds: settings.VoiceSubmitMinDelaySeconds,
-		VoiceSubmitTimeoutSeconds:  settings.VoiceSubmitTimeoutSeconds,
-		HapticsEnabled:             settings.HapticsEnabled,
-		HapticStrength:             settings.HapticStrength,
-		ExitHoldSeconds:            settings.ExitHoldSeconds,
-		Bindings:                   settings.Bindings,
-	}
-}
-
-// New is kept as a compatibility seam for existing callers and tests.
-func New(settings config.Settings, gamepad core.Gamepad, desktop core.Desktop, verbose bool, output io.Writer) *Engine {
-	return NewWithOptions(OptionsFromSettings(settings), gamepad, desktop, verbose, output)
 }

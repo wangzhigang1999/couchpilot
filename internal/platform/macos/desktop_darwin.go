@@ -319,8 +319,11 @@ func (d *Desktop) commitWindowSwitch() error {
 	if !d.windowSwitching {
 		return nil
 	}
+	if err := keyEventWithFlags(keyCommand, false, 0); err != nil {
+		return err
+	}
 	d.windowSwitching = false
-	return keyEventWithFlags(keyCommand, false, 0)
+	return nil
 }
 
 func mouseButton(button int, down bool) error {

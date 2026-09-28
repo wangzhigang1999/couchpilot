@@ -220,7 +220,7 @@ func run(options options) error {
 		go watchStopFile(ctx, stopRequest, cancel)
 	}
 	paths := daemon.RuntimePaths(options.configPath)
-	controller := engine.NewWithOptions(engine.OptionsFromSettings(settings), gamepad, desktop, options.verbose, os.Stdout)
+	controller := engine.New(runtimeOptions(settings), gamepad, desktop, options.verbose, os.Stdout)
 	var traceRecorder *trace.Recorder
 	if settings.LocalTraceEnabled {
 		traceRecorder, err = trace.Open(trace.Options{
@@ -256,7 +256,9 @@ func run(options options) error {
 		return fmt.Errorf("publish runtime readiness: %w", err)
 	}
 	runErr, trayErr := runApplication(ctx, cancel, application, controller.Run)
-	if errors.Is(runErr, engine.ErrExitRequested) {
+	// Only a clean emergency exit is normal. A joined cleanup failure must
+	// remain visible even when it also contains ErrExitRequested.
+	if runErr == engine.ErrExitRequested {
 		fmt.Println("emergency exit")
 		runErr = nil
 	}

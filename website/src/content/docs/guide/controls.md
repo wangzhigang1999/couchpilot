@@ -32,6 +32,12 @@ Press <kbd>Y</kbd> to start voice input, speak, and pause briefly before pressin
 
 Codex additionally lets you tap or hold <kbd>B</kbd> to delete characters before submitting. See the Codex page for those app-specific editing controls.
 
+App changes are checked while a voice sequence is active, even if you are not touching the gamepad. Leaving the app cancels the sequence; returning does not reactivate it. If the foreground app can no longer be identified, an existing identified sequence is also cancelled.
+
 ## How app profiles override controls
 
 When CouchPilot matches the foreground app to a profile, it replaces only the bindings declared by that profile. For example, RB moves to the next tab in a browser, while pointer movement, scrolling, right click, voice input, and window switching remain global.
+
+Configuration accepts `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`, optionally with one `lt+` or `rt+` prefix. `voice+a` and `voice+b` are separate contextual sequences and cannot take another prefix. Back and Start remain reserved for emergency exit. Unsupported names cause a configuration error rather than an ineffective binding.
+
+You can change the action assigned to `voice+b`. Only `backspace` repeats while held; other actions run once per press, mouse actions retain hold/release behavior, and voice uses the configured voice mode.
