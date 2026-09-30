@@ -57,7 +57,7 @@ test("publishes only Codex and browser profiles in both languages", async () => 
   }
 });
 
-test("documents delayed global voice submit and Codex-only deletion in both languages", async () => {
+test("documents delayed global voice submit and Codex-only voice deletion in both languages", async () => {
   const [englishCodex, englishBrowser, englishControls, englishSafety, chineseCodex, chineseBrowser, chineseControls, chineseSafety] = await Promise.all([
     readFile(new URL("../src/content/docs/apps/codex.md", import.meta.url), "utf8"),
     readFile(new URL("../src/content/docs/apps/browsers.md", import.meta.url), "utf8"),
@@ -69,7 +69,7 @@ test("documents delayed global voice submit and Codex-only deletion in both lang
     readFile(new URL("../src/content/docs/zh-cn/guide/safety.md", import.meta.url), "utf8"),
   ]);
 
-  assert.match(englishCodex, /X always remains right click/);
+  assert.match(englishCodex, /X without a trigger remains right click/);
   assert.match(englishCodex, /Codex additionally arms B as \*\*Backspace\*\*/);
   assert.match(englishBrowser, /Y<\/kbd>, then <kbd>A/);
   assert.match(englishControls, /Voice submit in every app/);
@@ -78,7 +78,7 @@ test("documents delayed global voice submit and Codex-only deletion in both lang
   assert.match(englishSafety, /Never steals input focus/);
   assert.match(englishSafety, /A sends only in an explicit voice-edit state/);
   assert.match(englishSafety, /waits for the configured minimum delay/);
-  assert.match(chineseCodex, /X 永远保持右键/);
+  assert.match(chineseCodex, /不按扳机时，X 保持右键/);
   assert.match(chineseCodex, /Codex 还会额外把 B 变成 \*\*Backspace\*\*/);
   assert.match(chineseBrowser, /<kbd>Y<\/kbd>，然后 <kbd>A/);
   assert.match(chineseControls, /所有 App 都能语音后回车/);
@@ -87,6 +87,24 @@ test("documents delayed global voice submit and Codex-only deletion in both lang
   assert.match(chineseSafety, /不会自动抢输入框/);
   assert.match(chineseSafety, /A 只在明确的语音编辑状态发送/);
   assert.match(chineseSafety, /先等待配置的最短时间/);
+});
+
+test("documents the global RT editing layer and its safety boundaries", async () => {
+  const [english, chinese] = await Promise.all([
+    readFile(new URL("../dist/guide/controls/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../dist/zh-cn/guide/controls/index.html", import.meta.url), "utf8"),
+  ]);
+  for (const page of [english, chinese]) {
+    for (const button of ["A", "B", "X", "Y"]) assert.ok(page.includes(`RT + ${button}`));
+  }
+  assert.match(english, /do not auto-repeat/);
+  assert.match(english, /without starting voice input or waiting two seconds/);
+  assert.match(english, /LT wins when both triggers are held/);
+  assert.match(english, /A disabled chord does nothing/);
+  assert.match(chinese, /不会自动连发/);
+  assert.match(chinese, /无需先启动语音，也不等待两秒/);
+  assert.match(chinese, /同时按住两个扳机时 LT 优先/);
+  assert.match(chinese, /已禁用的组合不执行任何动作/);
 });
 
 test("documents only the minimal privacy-safe local trace", async () => {

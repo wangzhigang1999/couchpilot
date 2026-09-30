@@ -108,7 +108,7 @@ func TestDisconnectRetriesVoiceRelease(t *testing.T) {
 	if err := controller.disconnect(); err != nil {
 		t.Fatal(err)
 	}
-	if attempts != 2 || controller.held.voice != 0 {
+	if attempts != 2 || controller.held.voice.buttons != 0 {
 		t.Fatalf("attempts=%d held=%v", attempts, controller.held.voice)
 	}
 }

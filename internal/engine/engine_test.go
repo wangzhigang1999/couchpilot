@@ -756,7 +756,7 @@ func TestTraceRecordsChordButNotWindowCommit(t *testing.T) {
 	}
 }
 
-func TestDisabledTriggerChordKeepsExistingBaseBindingBehavior(t *testing.T) {
+func TestDisabledTriggerChordDoesNotFallBackToBaseBinding(t *testing.T) {
 	settings := defaultOptions()
 	settings.Bindings = map[string]map[string]string{"chrome": {"lt+rb": ""}}
 	desktop := &fakeDesktop{profile: "chrome"}
@@ -767,10 +767,10 @@ func TestDisabledTriggerChordKeepsExistingBaseBindingBehavior(t *testing.T) {
 	if err := controller.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(desktop.actions, []core.Action{core.TabNext}) {
+	if len(desktop.actions) != 0 {
 		t.Fatalf("desktop actions = %v", desktop.actions)
 	}
-	if len(recorder.observations) != 2 || recorder.observations[1].Gesture != "rb" || recorder.observations[1].Action != string(core.TabNext) {
+	if len(recorder.observations) != 2 || recorder.observations[1].Gesture != "lt+rb" || recorder.observations[1].Resolution != trace.Disabled || recorder.observations[1].Outcome != trace.NoOutcome {
 		t.Fatalf("trace facts = %+v", recorder.observations)
 	}
 }

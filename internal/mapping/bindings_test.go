@@ -18,6 +18,10 @@ func TestBuiltInBindingsAreAStableUserContract(t *testing.T) {
 		{"default", "x", core.ClickRight, "default"},
 		{"default", "y", core.Voice, "default"},
 		{"default", "voice+a", core.Enter, "default"},
+		{"default", "rt+a", core.Enter, "default"},
+		{"default", "rt+b", core.Backspace, "default"},
+		{"default", "rt+x", core.Escape, "default"},
+		{"default", "rt+y", core.Find, "default"},
 		{"default", "dpad_up", core.ArrowUp, "default"},
 		{"default", "dpad_down", core.ArrowDown, "default"},
 		{"default", "dpad_left", core.ArrowLeft, "default"},
@@ -35,7 +39,7 @@ func TestBuiltInBindingsAreAStableUserContract(t *testing.T) {
 		{"codex", "rb", core.CodexNextTask, "codex"},
 		{"codex", "l3", core.CodexCommandMenu, "codex"},
 		{"codex", "r3", core.CodexTerminal, "codex"},
-		{"codex", "rt+a", core.Enter, "codex"},
+		{"codex", "rt+a", core.Enter, "default"},
 		{"codex", "dpad_up", core.ArrowUp, "default"},
 		{"codex", "lt+lb", core.WindowPrevious, "default"},
 		{"codex", "lt+rb", core.WindowNext, "default"},
@@ -45,6 +49,10 @@ func TestBuiltInBindingsAreAStableUserContract(t *testing.T) {
 		{"chrome", "x", core.ClickRight, "default"},
 		{"chrome", "y", core.Voice, "default"},
 		{"chrome", "voice+a", core.Enter, "default"},
+		{"chrome", "rt+a", core.Enter, "default"},
+		{"chrome", "rt+b", core.Backspace, "default"},
+		{"chrome", "rt+x", core.Escape, "default"},
+		{"chrome", "rt+y", core.Find, "default"},
 		{"chrome", "lb", core.TabPrevious, "chrome"},
 		{"chrome", "rb", core.TabNext, "chrome"},
 		{"chrome", "l3", core.FocusLocation, "chrome"},
@@ -70,9 +78,9 @@ func TestBuiltInBindingsAreAStableUserContract(t *testing.T) {
 func TestProfileOverrideCanReplaceDisableAndExtendBuiltIns(t *testing.T) {
 	resolver := NewResolver(map[string]map[string]string{
 		"chrome": {
-			"a":    string(core.Enter),
-			"rb":   "",
-			"rt+x": string(core.Find),
+			"a":     string(core.Enter),
+			"rb":    "",
+			"rt+lb": string(core.Find),
 		},
 		"custom": {
 			"x": string(core.Escape),
@@ -89,7 +97,7 @@ func TestProfileOverrideCanReplaceDisableAndExtendBuiltIns(t *testing.T) {
 	}{
 		{"replace fallback", "chrome", "a", core.Enter, BindingBound, "chrome"},
 		{"disable built-in", "chrome", "rb", "", BindingDisabled, "chrome"},
-		{"extend profile", "chrome", "rt+x", core.Find, BindingBound, "chrome"},
+		{"extend profile", "chrome", "rt+lb", core.Find, BindingBound, "chrome"},
 		{"custom action", "custom", "x", core.Escape, BindingBound, "custom"},
 		{"custom fallback", "custom", "a", core.ClickLeft, BindingBound, "default"},
 		{"unknown gesture", "custom", "back", "", BindingUnbound, ""},

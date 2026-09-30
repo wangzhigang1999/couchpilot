@@ -89,28 +89,17 @@ func (e *Engine) releaseHeldAction(button core.Button) error {
 	return e.held.releaseMouse(button, e.desktop.PerformOperation)
 }
 
-// Cleanup is bounded. Only successful releases consume state, so a transient
-// failure can be retried without repeating already completed operations.
+// Cleanup is bounded. Sessions retain failed releases and decide whether retry
+// is safe, even when cleanup runs again after a failed disconnect.
 func (e *Engine) releaseInputs() error {
 	var err error
-	var voiceErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		err = nil
 		for button := range e.held.mouse {
 			err = errors.Join(err, e.releaseHeldAction(button))
 		}
 		err = errors.Join(err, e.finishWindowSwitch())
-		if e.held.voice != 0 {
-			// Key-up is safe to retry, but a voice toggle tap may have
-			// already switched modes before reporting a partial failure.
-			if attempt == 0 || e.options.VoiceMode == "hold" {
-				voiceErr = e.voiceReleased()
-				if voiceErr == nil {
-					e.held.voice = 0
-				}
-			}
-			err = errors.Join(err, voiceErr)
-		}
+		err = errors.Join(err, e.voiceReleased(e.held.voice.buttons))
 		if err == nil {
 			return nil
 		}
@@ -119,28 +108,11 @@ func (e *Engine) releaseInputs() error {
 }
 
 func (e *Engine) voicePressed(button core.Button) error {
-	var err error
-	switch e.options.VoiceMode {
-	case "tap":
-		err = e.desktop.PerformOperation(core.VoiceTap)
-	case "toggle_while_held":
-		e.held.voice |= button
-		err = e.desktop.PerformOperation(core.VoiceTap)
-	case "hold":
-		e.held.voice |= button
-		err = e.desktop.PerformOperation(core.VoiceDown)
-	}
-	return err
+	return e.held.voice.press(button, e.options.VoiceMode, e.desktop.PerformOperation)
 }
 
-func (e *Engine) voiceReleased() error {
-	if e.options.VoiceMode == "toggle_while_held" {
-		return e.desktop.PerformOperation(core.VoiceTap)
-	}
-	if e.options.VoiceMode == "hold" {
-		return e.desktop.PerformOperation(core.VoiceUp)
-	}
-	return nil
+func (e *Engine) voiceReleased(buttons core.Button) error {
+	return e.held.voice.release(buttons, e.desktop.PerformOperation)
 }
 
 func (e *Engine) finishWindowSwitch() error {

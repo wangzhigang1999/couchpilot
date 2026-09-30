@@ -34,15 +34,8 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 			return err
 		}
 	}
-	if released&e.held.voice != 0 {
-		for _, item := range gestures {
-			if released&item.Button != 0 && e.held.voice&item.Button != 0 {
-				if err := e.voiceReleased(); err != nil {
-					return err
-				}
-				e.held.voice &^= item.Button
-			}
-		}
+	if err := e.voiceReleased(released); err != nil {
+		return err
 	}
 	if pressed == 0 {
 		return nil
@@ -80,14 +73,16 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 			}
 			gesture = "voice+a"
 			composeSubmit = true
-		} else if composeActive && gesture == "b" {
+		} else if composeActive && noTrigger && gesture == "b" {
 			if _, found := e.resolver.Resolve(profile, "voice+b"); found {
 				gesture = "voice+b"
 				composeEdit = true
 			} else {
 				e.clearCompose("other_control")
 			}
-		} else if composeActive && gesture != "y" {
+		} else if composeActive && (gesture != "y" || !noTrigger) {
+			// Explicit trigger chords leave voice editing. In particular,
+			// RT+Y must not retain the old submit session after opening Find.
 			e.clearCompose("other_control")
 		}
 		baseGesture := gesture
@@ -95,13 +90,13 @@ func (e *Engine) buttons(state core.State, now time.Time) error {
 		rightActive := !composeSubmit && !composeEdit && state.RightTrigger > 0.08
 		if leftActive {
 			leftCandidate := e.resolver.ResolveDetailed(profile, "lt+"+baseGesture)
-			if leftCandidate.Resolution == mapping.BindingBound {
+			if leftCandidate.Resolution != mapping.BindingUnbound {
 				gesture = leftCandidate.Gesture
 			}
 		}
 		if rightActive {
 			rightCandidate := e.resolver.ResolveDetailed(profile, "rt+"+baseGesture)
-			if !leftActive && rightCandidate.Resolution == mapping.BindingBound {
+			if !leftActive && rightCandidate.Resolution != mapping.BindingUnbound {
 				gesture = rightCandidate.Gesture
 			}
 		}
