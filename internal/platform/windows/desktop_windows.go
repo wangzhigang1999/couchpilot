@@ -228,8 +228,11 @@ func (d *Desktop) commitWindowSwitch() error {
 	if !d.windowSwitching {
 		return nil
 	}
+	if err := keyEvent(vkAlt, false); err != nil {
+		return err
+	}
 	d.windowSwitching = false
-	return keyEvent(vkAlt, false)
+	return nil
 }
 
 func (d *Desktop) ForegroundApplication() core.AppIdentity {

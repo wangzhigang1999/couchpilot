@@ -82,6 +82,10 @@ clears it and starts again instead of creating rotations or backups.
 | Y, then A | Press Enter in the current app |
 | LT | Precision pointer speed |
 | RT | Boost pointer speed |
+| RT + A | Enter / confirm immediately, in every app |
+| RT + B | Backspace once per press |
+| RT + X | Escape / cancel |
+| RT + Y | Find (Ctrl+F on Windows, Command+F on macOS) |
 | LT + M1 / RB | Next Windows window |
 | LT + M2 / LB | Previous Windows window |
 
@@ -91,7 +95,9 @@ corresponding shortcuts remain Control+Tab and Alt+Tab.
 
 Haptic feedback is enabled by default: clicks use a light tick, navigation uses a short pulse, voice activation is more noticeable, and window switching/commit uses the strongest confirmation. Controller connection also produces one short pulse.
 
-Codex keeps its task, command-menu, terminal and Back mappings. X remains right click in Codex so it cannot accidentally stop a response. Browsers keep tab, address-bar and new-tab mappings. The LT window shortcuts take priority without changing a shoulder button pressed by itself.
+Codex keeps its task, command-menu, terminal and Back mappings. X alone remains right click in Codex; RT+X deliberately sends Escape and may stop a response. Browsers keep tab, address-bar and new-tab mappings. The LT window shortcuts take priority without changing a shoulder button pressed by itself.
+
+Hold RT before pressing A/B/X/Y. Each editing chord runs once per press, without auto-repeat, and exits CouchPilot's temporary voice-edit state. RT+A does not require Y or the two-second voice delay; it sends Enter to the currently focused control. RT alone still boosts pointer speed. If both triggers are held, LT takes priority. Changing a trigger while a button is already held does not reinterpret that press; release and press the button again.
 
 For multiple windows, keep LT held, tap M1/RB or M2/LB repeatedly to move through the native window switcher, then release LT to select the highlighted window.
 
@@ -117,7 +123,7 @@ trace described above. This setting never enables network upload.
 on Windows. Explicit `right_alt` and `left_alt` remain available on both
 platforms; macOS also accepts `fn`.
 
-`voice_submit_min_delay_seconds` is the minimum pause after `Y` before `A` can submit; it defaults to two seconds because CouchPilot triggers the operating system's voice input but does not receive microphone or VAD events. An earlier `A` press is ignored instead of clicking or sending. `voice_submit_timeout_seconds` controls how long the global voice-submit state remains armed. Moving the pointer, changing apps, pressing another control, submitting, or reaching the timeout restores A to its normal mouse action. Codex additionally lets `B` delete one character, hold `B` to keep deleting, and `RT+A` submit at any time.
+`voice_submit_min_delay_seconds` is the minimum pause after `Y` before `A` can submit; it defaults to two seconds because CouchPilot triggers the operating system's voice input but does not receive microphone or VAD events. An earlier `A` press is ignored instead of clicking or sending. `voice_submit_timeout_seconds` controls how long the global voice-submit state remains armed. Moving the pointer, changing apps, pressing another control, submitting, or reaching the timeout restores A to its normal mouse action. Codex additionally lets unmodified `B` delete one character or repeat while held. `RT+A` sends Enter immediately in every app, while `RT+B` always performs only one Backspace per press.
 
 Bindings are optional overrides grouped by foreground-app profile. `app_profiles` controls which executable selects each profile; matching is case-insensitive, list items are alternatives, and `process_names` plus `path_contains` can disambiguate executables with the same name. Earlier rules win.
 
@@ -133,6 +139,10 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
     "default": {
       "a": "click_left",
       "voice+a": "enter",
+      "rt+a": "enter",
+      "rt+b": "backspace",
+      "rt+x": "escape",
+      "rt+y": "find",
       "lt+rb": "window_next"
     },
     "chrome": {
@@ -140,20 +150,21 @@ Bindings are optional overrides grouped by foreground-app profile. `app_profiles
       "l3": "focus_location"
     },
     "codex": {
-      "voice+b": "backspace",
-      "rt+a": "enter"
+      "voice+b": "backspace"
     }
   }
 }
 ```
 
-Set an action to an empty string to disable that exact binding. Run the following command to list valid action names:
+Set an action to an empty string to disable that exact binding. A disabled trigger chord does nothing instead of falling back to its base button; an unassigned chord still falls back. Run the following command to list valid action names:
 
 ```powershell
 .\bin\couchpilot.exe actions
 ```
 
 The current gesture names are `a`, `b`, `x`, `y`, `lb`, `rb`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`, and `dpad_right`. Prefix a gesture with `lt+` or `rt+` for a trigger chord. `voice+a` is the global contextual Enter gesture after Y; `voice+b` remains Codex's contextual, repeatable Backspace. The supplied `config.json` contains the editable Codex and Chrome profiles; all other apps use the `default` bindings.
+
+Only one trigger prefix is supported; `voice+a` and `voice+b` are separate sequences and cannot take an additional prefix. Back and Start are reserved for emergency exit. Unsupported gesture names are rejected when loading configuration instead of silently doing nothing. Custom `voice+b` actions follow normal action semantics: mouse clicks can be held, voice respects `voice_mode`, and only Backspace auto-repeats. Switching apps cancels the voice sequence even while the gamepad is idle; returning to the original app does not restore it.
 
 To check which profile CouchPilot sees for the foreground app, focus that app and run:
 
@@ -168,6 +179,7 @@ To check which profile CouchPilot sees for the foreground app, focus that app an
 - `internal/mapping`: built-in bindings, user overrides, fallback rules and foreground-app profile matching.
 - `internal/desktop`: the single semantic-action executor. It expands actions into logical keys, chords and the few operations that genuinely need OS-specific behavior.
 - `internal/engine`: the controller runtime, split into device selection, pointer/scroll processing, gesture dispatch, voice/window sessions and runtime diagnostics.
+- `cmd/couchpilot`: application assembly, including conversion from persisted settings to the engine's runtime options. The engine does not import `internal/config`.
 - `internal/trace`: append-only local JSONL diagnostics.
 - `internal/platform/windows`: XInput plus translation of logical desktop operations to Windows input.
 - `internal/platform/macos`: GameController/IOHID plus translation of logical desktop operations to CoreGraphics.

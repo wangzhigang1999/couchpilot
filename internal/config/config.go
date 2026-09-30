@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
+	"github.com/wangzhigang1999/couchpilot/internal/mapping"
 )
 
 const SchemaVersion = 1
@@ -290,6 +291,9 @@ func (s Settings) Validate() error {
 		for gesture, action := range bindings {
 			if gesture == "" {
 				return fmt.Errorf("binding gesture cannot be empty in profile %q", profile)
+			}
+			if !mapping.IsSupportedGesture(gesture) {
+				return fmt.Errorf("unsupported binding gesture %q in profile %q (Back/Start are reserved for emergency exit)", gesture, profile)
 			}
 			if action != "" && !core.IsKnownAction(core.Action(action)) {
 				return fmt.Errorf("unknown action %q for %s/%s", action, profile, gesture)

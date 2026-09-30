@@ -270,3 +270,15 @@ func TestRejectsEngineOperationsAsUserBindings(t *testing.T) {
 		t.Fatal("engine-only mouse operation was accepted as a configurable action")
 	}
 }
+
+func TestRejectsUnsupportedGestures(t *testing.T) {
+	for _, gesture := range []string{"start", "back", "back+start", "typo", "lt+typo", "voice+x", "lt+voice+a", "rt+lt+a"} {
+		t.Run(gesture, func(t *testing.T) {
+			settings := Default()
+			settings.Bindings = map[string]map[string]string{"default": {gesture: "find"}}
+			if err := settings.Validate(); err == nil {
+				t.Fatalf("unsupported gesture %q accepted", gesture)
+			}
+		})
+	}
+}

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wangzhigang1999/couchpilot/internal/config"
 	"github.com/wangzhigang1999/couchpilot/internal/core"
 	"github.com/wangzhigang1999/couchpilot/internal/trace"
 )
@@ -74,7 +73,7 @@ func TestRunAcceptsInputFromAnyConnectedController(t *testing.T) {
 	}
 	desktop := &fakeDesktop{}
 	ctx, cancel := context.WithCancel(context.Background())
-	controller := New(config.Default(), gamepad, desktop, false, nil)
+	controller := New(defaultOptions(), gamepad, desktop, false, nil)
 	controller.clock = &cancelOnSleepClock{now: time.Now(), cancel: cancel}
 
 	if err := controller.Run(ctx); err != nil {
@@ -86,7 +85,7 @@ func TestRunAcceptsInputFromAnyConnectedController(t *testing.T) {
 }
 
 func TestConfiguredControllerDoesNotAllowAnotherControllerToTakeOver(t *testing.T) {
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.ControllerIndex = 0
 	gamepad := &multiGamepad{
 		devices: []core.DeviceID{"test:0", "test:1"},
@@ -155,7 +154,7 @@ func (d *smoothDesktop) ScrollSmooth(amount float64, phase core.SmoothScrollPhas
 
 func TestSmoothScrollerReceivesEveryFrame(t *testing.T) {
 	desktop := &smoothDesktop{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	if err := controller.Step(core.State{RightY: 0.5}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +162,7 @@ func TestSmoothScrollerReceivesEveryFrame(t *testing.T) {
 		t.Fatalf("smooth scroll calls=%d want 1", len(desktop.events))
 	}
 	event := desktop.events[0]
-	maximum := config.Default().ScrollUnitsPerSecond * 0.5 / 120
+	maximum := defaultOptions().ScrollUnitsPerSecond * 0.5 / 120
 	if event.amount <= 0 || event.amount >= maximum {
 		t.Fatalf("smoothed amount=%f want between 0 and %f", event.amount, maximum)
 	}
@@ -183,7 +182,7 @@ func TestSmoothScrollerReceivesEveryFrame(t *testing.T) {
 
 func TestStepReadsForegroundContextAtMostOnce(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome", processName: "Google Chrome"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(&fakeTraceRecorder{})
 	state := core.State{Buttons: core.A, LeftTrigger: 1}
 	if err := controller.Step(state, 1.0/120, time.Now()); err != nil {
@@ -196,7 +195,7 @@ func TestStepReadsForegroundContextAtMostOnce(t *testing.T) {
 
 func TestLTShouldersOverrideChromeTabs(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	if err := engine.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, now); err != nil {
 		t.Fatal(err)
@@ -208,7 +207,7 @@ func TestLTShouldersOverrideChromeTabs(t *testing.T) {
 
 func TestLTShouldersCycleMultipleWindowsUntilLTIsReleased(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{
 		{Buttons: core.RightShoulder, LeftTrigger: 1},
@@ -241,7 +240,7 @@ func TestLTShouldersCycleMultipleWindowsUntilLTIsReleased(t *testing.T) {
 
 func TestDisconnectCommitsWindowSwitch(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	if err := engine.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +252,7 @@ func TestDisconnectCommitsWindowSwitch(t *testing.T) {
 
 func TestSingleChromeShoulderKeepsTabMapping(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	if err := engine.Step(core.State{Buttons: core.RightShoulder}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +263,7 @@ func TestSingleChromeShoulderKeepsTabMapping(t *testing.T) {
 
 func TestReleasedLTDoesNotModifyLaterChromeShoulder(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{
 		{LeftTrigger: 1},
@@ -283,7 +282,7 @@ func TestReleasedLTDoesNotModifyLaterChromeShoulder(t *testing.T) {
 
 func TestAHoldsLeftMouseUntilReleased(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{
 		{Buttons: core.A},
@@ -308,7 +307,7 @@ func TestAHoldsLeftMouseUntilReleased(t *testing.T) {
 
 func TestCodexXUsesRightMouseInsteadOfEscape(t *testing.T) {
 	desktop := &fakeDesktop{profile: "codex"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	if err := engine.Step(core.State{Buttons: core.X}, 1.0/120, now); err != nil {
 		t.Fatal(err)
@@ -331,7 +330,7 @@ func TestVoiceThenASubmitsWithoutClickingInEveryProfile(t *testing.T) {
 	for _, profile := range []string{"default", "chrome", "codex", "custom"} {
 		t.Run(profile, func(t *testing.T) {
 			desktop := &fakeDesktop{profile: profile, processName: profile + ".exe"}
-			controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+			controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 			now := time.Now()
 			states := []core.State{
 				{Buttons: core.Y},
@@ -354,7 +353,7 @@ func TestVoiceThenASubmitsWithoutClickingInEveryProfile(t *testing.T) {
 
 func TestCodexBDeletesAndKeepsVoiceSubmitArmed(t *testing.T) {
 	desktop := &fakeDesktop{profile: "codex"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{
 		{Buttons: core.Y},
@@ -381,7 +380,7 @@ func TestCodexBDeletesAndKeepsVoiceSubmitArmed(t *testing.T) {
 }
 
 func TestVoiceSubmitIgnoresAUntilMinimumDelay(t *testing.T) {
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.VoiceSubmitMinDelaySeconds = 2
 	desktop := &fakeDesktop{profile: "default"}
 	controller := New(settings, fakeGamepad{}, desktop, false, nil)
@@ -410,7 +409,7 @@ func TestVoiceSubmitIgnoresAUntilMinimumDelay(t *testing.T) {
 
 func TestHoldingCodexBRepeatsBackspaceUntilReleased(t *testing.T) {
 	desktop := &fakeDesktop{profile: "codex"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []struct {
 		state core.State
@@ -442,7 +441,7 @@ func TestHoldingCodexBRepeatsBackspaceUntilReleased(t *testing.T) {
 
 func TestCodexBOutsideVoiceComposeStillNavigatesBack(t *testing.T) {
 	desktop := &fakeDesktop{profile: "codex"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	if err := controller.Step(core.State{Buttons: core.B}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +452,7 @@ func TestCodexBOutsideVoiceComposeStillNavigatesBack(t *testing.T) {
 
 func TestPointerMovementCancelsGlobalVoiceSubmit(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{
 		{Buttons: core.Y},
@@ -480,7 +479,7 @@ func TestPointerMovementCancelsGlobalVoiceSubmit(t *testing.T) {
 
 func TestCodexRTAAlwaysSubmits(t *testing.T) {
 	desktop := &fakeDesktop{profile: "codex"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	if err := controller.Step(core.State{Buttons: core.A, RightTrigger: 1}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +490,7 @@ func TestCodexRTAAlwaysSubmits(t *testing.T) {
 
 func TestVoiceThenBOutsideCodexUsesNormalBindingAndClearsSubmit(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	states := []core.State{{Buttons: core.Y}, {}, {Buttons: core.B}, {}, {Buttons: core.A}, {}}
 	for index, state := range states {
@@ -507,7 +506,7 @@ func TestVoiceThenBOutsideCodexUsesNormalBindingAndClearsSubmit(t *testing.T) {
 
 func TestVoiceSubmitCancelsWhenForegroundAppChangesWithinSameProfile(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default", processName: "first.exe"}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	now := time.Now()
 	if err := controller.Step(core.State{Buttons: core.Y}, 1.0/120, now); err != nil {
 		t.Fatal(err)
@@ -529,7 +528,7 @@ func TestVoiceSubmitCancelsWhenForegroundAppChangesWithinSameProfile(t *testing.
 }
 
 func TestGlobalVoiceSubmitTimesOut(t *testing.T) {
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.VoiceSubmitTimeoutSeconds = 5
 	desktop := &fakeDesktop{profile: "chrome"}
 	controller := New(settings, fakeGamepad{}, desktop, false, nil)
@@ -561,7 +560,7 @@ func TestGlobalVoiceSubmitTimesOut(t *testing.T) {
 
 func TestDisconnectReleasesHeldMouseButton(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
-	engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	if err := engine.Step(core.State{Buttons: core.A}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +571,7 @@ func TestDisconnectReleasesHeldMouseButton(t *testing.T) {
 }
 
 func TestCustomBindingOverridesBuiltIn(t *testing.T) {
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.Bindings = map[string]map[string]string{"default": {"a": string(core.Enter)}}
 	desktop := &fakeDesktop{profile: "default"}
 	engine := New(settings, fakeGamepad{}, desktop, false, nil)
@@ -587,7 +586,7 @@ func TestCustomBindingOverridesBuiltIn(t *testing.T) {
 func TestPrecisionAndBoostPointerSpeed(t *testing.T) {
 	distance := func(lt, rt float64) int {
 		desktop := &fakeDesktop{}
-		engine := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+		engine := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 		_ = engine.Step(core.State{LeftX: 1, LeftTrigger: lt, RightTrigger: rt}, 1.0/120, time.Now())
 		return desktop.moves[0][0]
 	}
@@ -599,7 +598,7 @@ func TestPrecisionAndBoostPointerSpeed(t *testing.T) {
 func TestButtonActionProducesPerceptibleHapticPulse(t *testing.T) {
 	var rumbles [][2]uint16
 	gamepad := fakeGamepad{rumbles: &rumbles}
-	controller := New(config.Default(), gamepad, &fakeDesktop{}, false, nil)
+	controller := New(defaultOptions(), gamepad, &fakeDesktop{}, false, nil)
 	controller.device = "test:0"
 	now := time.Now()
 	if err := controller.Step(core.State{Buttons: core.A}, 1.0/120, now); err != nil {
@@ -619,7 +618,7 @@ func TestButtonActionProducesPerceptibleHapticPulse(t *testing.T) {
 func TestWindowCommitIsStrongerThanCycleTick(t *testing.T) {
 	var rumbles [][2]uint16
 	gamepad := fakeGamepad{rumbles: &rumbles}
-	controller := New(config.Default(), gamepad, &fakeDesktop{}, false, nil)
+	controller := New(defaultOptions(), gamepad, &fakeDesktop{}, false, nil)
 	controller.device = "test:0"
 	now := time.Now()
 	if err := controller.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, now); err != nil {
@@ -637,7 +636,7 @@ func TestWindowCommitIsStrongerThanCycleTick(t *testing.T) {
 
 func TestHapticsCanBeDisabled(t *testing.T) {
 	var rumbles [][2]uint16
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.HapticsEnabled = false
 	controller := New(settings, fakeGamepad{rumbles: &rumbles}, &fakeDesktop{}, false, nil)
 	controller.device = "test:0"
@@ -652,7 +651,7 @@ func TestHapticsCanBeDisabled(t *testing.T) {
 func TestTraceRecordsDefaultFallbackWithStepTimestamp(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
 	recorder := &fakeTraceRecorder{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(recorder)
 	now := time.Date(2026, 7, 20, 1, 2, 3, 0, time.UTC)
 
@@ -673,7 +672,7 @@ func TestTraceRecordsDefaultFallbackWithStepTimestamp(t *testing.T) {
 func TestTraceRecordsEachDigitalRisingEdgeOnce(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
 	recorder := &fakeTraceRecorder{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(recorder)
 	now := time.Now()
 	states := []core.State{
@@ -699,7 +698,7 @@ func TestTraceRecordsEachDigitalRisingEdgeOnce(t *testing.T) {
 }
 
 func TestTraceRecordsDisabledAndUnboundControls(t *testing.T) {
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.Bindings = map[string]map[string]string{"chrome": {"a": ""}}
 	desktop := &fakeDesktop{profile: "chrome"}
 	recorder := &fakeTraceRecorder{}
@@ -727,7 +726,7 @@ func TestTraceRecordsDisabledAndUnboundControls(t *testing.T) {
 func TestTraceRecordsChordButNotWindowCommit(t *testing.T) {
 	desktop := &fakeDesktop{profile: "chrome"}
 	recorder := &fakeTraceRecorder{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(recorder)
 	now := time.Now()
 	states := []core.State{
@@ -757,8 +756,8 @@ func TestTraceRecordsChordButNotWindowCommit(t *testing.T) {
 	}
 }
 
-func TestDisabledTriggerChordKeepsExistingBaseBindingBehavior(t *testing.T) {
-	settings := config.Default()
+func TestDisabledTriggerChordDoesNotFallBackToBaseBinding(t *testing.T) {
+	settings := defaultOptions()
 	settings.Bindings = map[string]map[string]string{"chrome": {"lt+rb": ""}}
 	desktop := &fakeDesktop{profile: "chrome"}
 	recorder := &fakeTraceRecorder{}
@@ -768,10 +767,10 @@ func TestDisabledTriggerChordKeepsExistingBaseBindingBehavior(t *testing.T) {
 	if err := controller.Step(core.State{Buttons: core.RightShoulder, LeftTrigger: 1}, 1.0/120, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(desktop.actions, []core.Action{core.TabNext}) {
+	if len(desktop.actions) != 0 {
 		t.Fatalf("desktop actions = %v", desktop.actions)
 	}
-	if len(recorder.observations) != 2 || recorder.observations[1].Gesture != "rb" || recorder.observations[1].Action != string(core.TabNext) {
+	if len(recorder.observations) != 2 || recorder.observations[1].Gesture != "lt+rb" || recorder.observations[1].Resolution != trace.Disabled || recorder.observations[1].Outcome != trace.NoOutcome {
 		t.Fatalf("trace facts = %+v", recorder.observations)
 	}
 }
@@ -779,7 +778,7 @@ func TestDisabledTriggerChordKeepsExistingBaseBindingBehavior(t *testing.T) {
 func TestTraceRecordsFailureOnceAndConsumesEdge(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default", performError: errors.New("injected failure")}
 	recorder := &fakeTraceRecorder{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(recorder)
 	now := time.Now()
 	state := core.State{Buttons: core.DPadUp}
@@ -798,7 +797,7 @@ func TestTraceRecordsFailureOnceAndConsumesEdge(t *testing.T) {
 func TestTraceDoesNotCountVoiceDeleteRepeats(t *testing.T) {
 	desktop := &fakeDesktop{profile: "codex"}
 	recorder := &fakeTraceRecorder{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(recorder)
 	now := time.Now()
 	states := []struct {
@@ -828,7 +827,7 @@ func TestTraceDoesNotCountVoiceDeleteRepeats(t *testing.T) {
 func TestTraceRecordsAnalogInactiveToActiveEdgesAndDisconnectReset(t *testing.T) {
 	desktop := &fakeDesktop{profile: "default"}
 	recorder := &fakeTraceRecorder{}
-	controller := New(config.Default(), fakeGamepad{}, desktop, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, desktop, false, nil)
 	controller.SetTraceSink(recorder)
 	now := time.Now()
 	active := core.State{LeftTrigger: 1, RightTrigger: 1, LeftX: 1, RightX: 1}
@@ -858,7 +857,7 @@ func TestTraceRecordsAnalogInactiveToActiveEdgesAndDisconnectReset(t *testing.T)
 
 func TestTraceRecordsIndividualStartAndBackEdges(t *testing.T) {
 	now := time.Now()
-	controller := New(config.Default(), fakeGamepad{}, &fakeDesktop{profile: "default"}, false, nil)
+	controller := New(defaultOptions(), fakeGamepad{}, &fakeDesktop{profile: "default"}, false, nil)
 	recorder := &fakeTraceRecorder{}
 	controller.SetTraceSink(recorder)
 	for index, state := range []core.State{{Buttons: core.Start}, {}, {Buttons: core.Back}} {
@@ -877,7 +876,7 @@ func TestTraceRecordsIndividualStartAndBackEdges(t *testing.T) {
 }
 
 func TestTraceRecordsBriefBackStartAsPhysicalEdgesWithoutSystemCombo(t *testing.T) {
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.ExitHoldSeconds = 0.1
 	now := time.Now()
 	controller := New(settings, fakeGamepad{}, &fakeDesktop{profile: "default"}, false, nil)
@@ -912,7 +911,7 @@ func TestTraceRecordsBriefBackStartAsPhysicalEdgesWithoutSystemCombo(t *testing.
 func TestTraceRecordsSequentialBackStartEdgesAndSystemComboAtThreshold(t *testing.T) {
 	now := time.Now()
 
-	settings := config.Default()
+	settings := defaultOptions()
 	settings.ExitHoldSeconds = 0.1
 	controller := New(settings, fakeGamepad{}, &fakeDesktop{profile: "codex", processName: "ChatGPT.exe"}, false, nil)
 	recorder := &fakeTraceRecorder{}

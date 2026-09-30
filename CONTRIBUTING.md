@@ -25,6 +25,9 @@ go vet ./...
 - Keep bindings, fallback and app-profile matching in `internal/mapping`.
 - Keep semantic shortcut recipes in `internal/desktop`; platform adapters translate only logical keys and true OS primitives.
 - Keep controller lifecycle and gesture/session state in the focused files under `internal/engine`.
+- Keep persisted-settings conversion in `cmd/couchpilot`; construct the engine with runtime `Options` only.
+- Share the supported gesture catalog between validation and dispatch. All gestures use the same action lifecycle; test configuration through an engine step, not just resolver lookup.
+- Retain held-input state until release succeeds. Cleanup retries must be bounded and persistent failures must propagate to the caller.
 - Add OS implementations and build-tagged composition under `internal/platform`.
 - Treat `config.json` as a versioned public contract; update validation and tests when changing it.
 - Prefer small interfaces and data-driven bindings over a plugin framework.

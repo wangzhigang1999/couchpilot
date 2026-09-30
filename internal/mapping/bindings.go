@@ -92,6 +92,10 @@ func defaultBindings() map[string]map[string]string {
 			"x":          string(core.ClickRight),
 			"y":          string(core.Voice),
 			"voice+a":    string(core.Enter),
+			"rt+a":       string(core.Enter),
+			"rt+b":       string(core.Backspace),
+			"rt+x":       string(core.Escape),
+			"rt+y":       string(core.Find),
 			"dpad_up":    string(core.ArrowUp),
 			"dpad_down":  string(core.ArrowDown),
 			"dpad_left":  string(core.ArrowLeft),
@@ -105,7 +109,6 @@ func defaultBindings() map[string]map[string]string {
 			"rb":      string(core.CodexNextTask),
 			"l3":      string(core.CodexCommandMenu),
 			"r3":      string(core.CodexTerminal),
-			"rt+a":    string(core.Enter),
 			"voice+b": string(core.Backspace),
 		},
 		"chrome": {
