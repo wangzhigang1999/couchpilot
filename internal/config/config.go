@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,6 +81,9 @@ func Load(path string) (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
+	// Windows editors and tools may prefix UTF-8 files with a byte-order mark.
+	// Strip it once at the file boundary, before both JSON decoding passes.
+	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return Settings{}, fmt.Errorf("decode config: %w", err)
 	}

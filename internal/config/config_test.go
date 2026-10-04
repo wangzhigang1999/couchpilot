@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
@@ -22,6 +23,61 @@ func TestLoadPartialConfigAndKeepDefaults(t *testing.T) {
 	if settings.ControllerIndex != 1 || settings.PollHz != 120 || settings.VoiceKey != "platform_default" ||
 		settings.VoiceSubmitMinDelaySeconds != 2 || !settings.LocalTraceEnabled || len(settings.AppProfiles) != 2 {
 		t.Fatalf("unexpected settings: %+v", settings)
+	}
+}
+
+func TestLoadUTF8BOMConfig(t *testing.T) {
+	for _, prefix := range []string{"", "\xef\xbb\xbf"} {
+		for _, test := range []struct {
+			name string
+			data string
+		}{
+			{"current trace opt-out", `{"poll_hz":60,"local_trace_enabled":false}`},
+			{"legacy trace opt-out", `{"poll_hz":60,"local_usage_stats_enabled":false}`},
+			{"current opt-out takes precedence", `{"poll_hz":60,"local_trace_enabled":false,"local_usage_stats_enabled":true}`},
+		} {
+			t.Run(test.name+"/BOM="+strconv.FormatBool(prefix != ""), func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "config.json")
+				data := []byte(prefix + "\r\n" + test.data + "\r\n")
+				if err := os.WriteFile(path, data, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				settings, err := Load(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if settings.PollHz != 60 || settings.LocalTraceEnabled || settings.PointerMaxSpeed != Default().PointerMaxSpeed {
+					t.Fatalf("unexpected settings: %+v", settings)
+				}
+				stored, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(stored) != string(data) {
+					t.Fatal("loading config changed the original file")
+				}
+			})
+		}
+	}
+}
+
+func TestLoadBOMConfigStillRejectsInvalidSettings(t *testing.T) {
+	for _, data := range []string{
+		"\xef\xbb\xbf",
+		"\xef\xbb\xbf" + `{"poll_hz":`,
+		"\xef\xbb\xbf" + `{"poll_hz":0}`,
+		"\xef\xbb\xbf" + `{} {}`,
+		"\xef\xbb\xbf\xef\xbb\xbf{}",
+	} {
+		t.Run(data, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err == nil {
+				t.Fatal("invalid config was accepted")
+			}
+		})
 	}
 }
 

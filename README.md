@@ -114,6 +114,8 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 
 `config.json` is the stable configuration contract for the CLI and a future UI. A UI only needs to validate and edit this file; the engine remains unchanged.
 
+Save the file as UTF-8. A leading UTF-8 BOM, as written by some Windows editors and tools, is also supported; loading an existing file never rewrites it.
+
 Set `haptics_enabled` to `false` to disable vibration, or adjust `haptic_strength` from `0.0` to `2.0`. The default is `1.0`.
 
 Set `local_trace_enabled` to `false` to disable the local JSONL diagnostic
