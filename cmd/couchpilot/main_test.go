@@ -3,10 +3,48 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/wangzhigang1999/couchpilot/internal/tray"
 )
+
+func TestExecuteSubcommandHelpSucceedsWithoutCreatingRuntimeFiles(t *testing.T) {
+	for _, command := range []string{"run", "start", "stop", "status", "doctor", "inspect", "profile"} {
+		for _, help := range []string{"--help", "-h"} {
+			t.Run(command+"/"+help, func(t *testing.T) {
+				directory := t.TempDir()
+				configPath := filepath.Join(directory, "config.json")
+				if err := execute([]string{command, "--config", configPath, help}); err != nil {
+					t.Fatalf("help returned an error: %v", err)
+				}
+				entries, err := os.ReadDir(directory)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(entries) != 0 {
+					t.Fatalf("help created runtime files: %v", entries)
+				}
+			})
+		}
+	}
+}
+
+func TestExecuteStillRejectsInvalidOptions(t *testing.T) {
+	for _, args := range [][]string{
+		{"status", "--unknown-option"},
+		{"status", "--config"},
+		{"status", "--verbose=invalid"},
+		{"status", "unexpected-argument"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			if err := execute(args); err == nil {
+				t.Fatal("invalid options were accepted")
+			}
+		})
+	}
+}
 
 type fakeApplication struct {
 	run func(context.Context) error

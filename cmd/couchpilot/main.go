@@ -65,6 +65,10 @@ func execute(args []string) error {
 		return nil
 	}
 	options, err := parseOptions(command, args)
+	if errors.Is(err, flag.ErrHelp) {
+		// The flag parser already printed help; do not dispatch the command.
+		return nil
+	}
 	if err != nil {
 		return err
 	}
