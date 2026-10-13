@@ -84,6 +84,11 @@ func Load(path string) (Settings, error) {
 	// Windows editors and tools may prefix UTF-8 files with a byte-order mark.
 	// Strip it once at the file boundary, before both JSON decoding passes.
 	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
+	// JSON null leaves a struct unchanged. Reject it instead of silently
+	// activating every default, including local tracing.
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return Settings{}, errors.New("decode config: expected a JSON object, got null (use {} for defaults)")
+	}
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return Settings{}, fmt.Errorf("decode config: %w", err)
 	}
