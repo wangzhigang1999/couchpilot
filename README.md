@@ -118,6 +118,8 @@ CouchPilot identifies the foreground executable and applies a small, safe profil
 
 Save the file as UTF-8. A leading UTF-8 BOM, as written by some Windows editors and tools, is also supported; loading an existing file never rewrites it.
 
+The file must contain a JSON object. Use `{}` to explicitly select defaults; `null` is rejected instead of silently enabling default settings, including local tracing.
+
 Set `haptics_enabled` to `false` to disable vibration, or adjust `haptic_strength` from `0.0` to `2.0`. The default is `1.0`.
 
 Set `local_trace_enabled` to `false` to disable the local JSONL diagnostic
