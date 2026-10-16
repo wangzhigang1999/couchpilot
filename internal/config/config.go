@@ -69,8 +69,13 @@ func defaultAppProfiles() []core.AppProfile {
 	}
 }
 
-func Load(path string) (Settings, error) {
-	settings := Default()
+func Load(path string) (settings Settings, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("load config %q: %w", path, err)
+		}
+	}()
+	settings = Default()
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		if err := Save(path, settings); err != nil {
