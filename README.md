@@ -65,8 +65,10 @@ This file is deliberately not a statistics feature: there is no report,
 dashboard, recommendation engine, aggregation database or tray menu for it.
 It exists only for inspecting a mapping or dispatch problem. Set
 `local_trace_enabled` to `false` to stop appending new lines. The single file
-is capped at 8 MiB; when the next line would exceed that limit, CouchPilot
-clears it and starts again instead of creating rotations or backups.
+is capped at 8 MiB; when the next valid line would make the file exceed that
+limit, CouchPilot clears it and starts again instead of creating rotations
+or backups. A single line larger than the limit is rejected with a diagnostic
+error, preserving the existing trace and allowing later records to continue.
 
 ## Controls
 

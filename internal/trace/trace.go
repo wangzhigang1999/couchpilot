@@ -124,6 +124,10 @@ func (r *Recorder) Record(fact Fact) {
 		return
 	}
 	line = append(line, '\n')
+	if len(line) > maxFileBytes {
+		r.report(fmt.Errorf("trace fact size %d exceeds file limit %d", len(line), maxFileBytes))
+		return
+	}
 
 	r.mu.Lock()
 	if r.closed {
