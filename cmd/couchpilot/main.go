@@ -58,12 +58,6 @@ func execute(args []string) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		command, args = args[0], args[1:]
 	}
-	if command == "actions" {
-		for _, action := range core.KnownActions {
-			fmt.Println(action)
-		}
-		return nil
-	}
 	options, err := parseOptions(command, args)
 	if errors.Is(err, flag.ErrHelp) {
 		// The flag parser already printed help; do not dispatch the command.
@@ -71,6 +65,12 @@ func execute(args []string) error {
 	}
 	if err != nil {
 		return err
+	}
+	if command == "actions" {
+		for _, action := range core.KnownActions {
+			fmt.Println(action)
+		}
+		return nil
 	}
 	absoluteConfig, err := filepath.Abs(options.configPath)
 	if err != nil {
@@ -179,11 +179,14 @@ func parseOptions(command string, args []string) (options, error) {
 	set := flag.NewFlagSet(command, flag.ContinueOnError)
 	set.SetOutput(os.Stderr)
 	var result options
-	set.StringVar(&result.configPath, "config", "config.json", "configuration file")
-	set.StringVar(&result.pidFile, "pid-file", "", "internal background process pid file")
-	set.StringVar(&result.stopFile, "stop-file", "", "internal background process stop file")
-	set.BoolVar(&result.verbose, "verbose", false, "log input actions")
-	set.BoolVar(&result.appLaunch, "app-launch", false, "internal application-bundle launch mode")
+	// Listing actions is config-independent and accepts no runtime options.
+	if command != "actions" {
+		set.StringVar(&result.configPath, "config", "config.json", "configuration file")
+		set.StringVar(&result.pidFile, "pid-file", "", "internal background process pid file")
+		set.StringVar(&result.stopFile, "stop-file", "", "internal background process stop file")
+		set.BoolVar(&result.verbose, "verbose", false, "log input actions")
+		set.BoolVar(&result.appLaunch, "app-launch", false, "internal application-bundle launch mode")
+	}
 	if err := set.Parse(args); err != nil {
 		return options{}, err
 	}
