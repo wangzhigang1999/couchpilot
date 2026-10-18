@@ -183,6 +183,9 @@ func (e *Engine) disconnect() error {
 	}
 	e.smoothScrollActive = false
 	e.smoothScrollVelocity = 0
+	// Fractional input belongs to the old controller session, not its successor.
+	e.scrollRemainder = 0
+	e.moveRemainder = [2]float64{}
 	releaseErr := e.releaseInputs()
 	e.clearCompose("disconnect")
 	if e.device != "" {
