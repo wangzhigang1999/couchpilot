@@ -68,11 +68,7 @@ func (e *Engine) scrollSmooth(axis, dt float64) error {
 		e.smoothScrollVelocity = 0
 	}
 	if e.smoothScrollVelocity == 0 {
-		if !e.smoothScrollActive {
-			return nil
-		}
-		e.smoothScrollActive = false
-		return e.smoothScroller.ScrollSmooth(0, core.SmoothScrollEnded)
+		return e.endSmoothScroll()
 	}
 	phase := core.SmoothScrollChanged
 	if !e.smoothScrollActive {
@@ -80,4 +76,15 @@ func (e *Engine) scrollSmooth(axis, dt float64) error {
 		phase = core.SmoothScrollBegan
 	}
 	return e.smoothScroller.ScrollSmooth(e.smoothScrollVelocity*dt, phase)
+}
+
+func (e *Engine) endSmoothScroll() error {
+	if !e.smoothScrollActive || e.smoothScroller == nil {
+		return nil
+	}
+	if err := e.smoothScroller.ScrollSmooth(0, core.SmoothScrollEnded); err != nil {
+		return err
+	}
+	e.smoothScrollActive = false
+	return nil
 }

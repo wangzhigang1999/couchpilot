@@ -94,7 +94,7 @@ func (e *Engine) releaseHeldAction(button core.Button) error {
 func (e *Engine) releaseInputs() error {
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
-		err = nil
+		err = e.endSmoothScroll()
 		for button := range e.held.mouse {
 			err = errors.Join(err, e.releaseHeldAction(button))
 		}
