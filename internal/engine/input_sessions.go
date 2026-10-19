@@ -113,10 +113,32 @@ func (s *voiceSession) release(buttons core.Button, perform func(core.Operation)
 	return nil
 }
 
+// Multiple bindings can hold the same OS mouse button. Only the first owner
+// presses it, and only the final owner releases it.
+func (s *heldSession) pressMouse(button core.Button, down, up core.Operation, perform func(core.Operation) error) error {
+	for _, pending := range s.mouse {
+		if pending == up {
+			s.mouse[button] = up
+			return nil
+		}
+	}
+	if err := perform(down); err != nil {
+		return err
+	}
+	s.mouse[button] = up
+	return nil
+}
+
 func (s *heldSession) releaseMouse(button core.Button, perform func(core.Operation) error) error {
 	operation, found := s.mouse[button]
 	if !found {
 		return nil
+	}
+	for owner, pending := range s.mouse {
+		if owner != button && pending == operation {
+			delete(s.mouse, button)
+			return nil
+		}
 	}
 	if err := perform(operation); err != nil {
 		return err
