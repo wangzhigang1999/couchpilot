@@ -133,6 +133,8 @@ platforms; macOS also accepts `fn`.
 
 Bindings are optional overrides grouped by foreground-app profile. `app_profiles` controls which executable selects each profile; matching is case-insensitive, list items are alternatives, and `process_names` plus `path_contains` can disambiguate executables with the same name. Earlier rules win.
 
+Omitting `app_profiles` keeps the built-in rules. An explicit array replaces them: each entry must supply its own name and at least one matcher, without inheriting fields from built-in rules. An empty array disables application-specific matching.
+
 ```json
 {
   "app_profiles": [
