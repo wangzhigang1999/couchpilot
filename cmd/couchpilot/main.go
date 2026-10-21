@@ -357,11 +357,9 @@ func doctor(configPath string) error {
 		hapticsSupported = capabilities.HapticsSupported(device)
 	}
 	if hapticsSupported {
-		if err := gamepad.Rumble(device, 36000, 26000); err != nil {
+		if err := testControllerHaptics(gamepad, device, time.Sleep); err != nil {
 			return err
 		}
-		time.Sleep(180 * time.Millisecond)
-		_ = gamepad.Rumble(device, 0, 0)
 		fmt.Println("controller haptics: test pulse sent")
 	} else {
 		fmt.Println("controller haptics: unsupported (test skipped)")
@@ -371,6 +369,23 @@ func doctor(configPath string) error {
 	}
 	fmt.Println("desktop automation: ready")
 	return nil
+}
+
+func testControllerHaptics(gamepad core.Gamepad, device core.DeviceID, sleep func(time.Duration)) error {
+	if err := gamepad.Rumble(device, 36000, 26000); err != nil {
+		return fmt.Errorf("start haptics test on %s: %w", device, err)
+	}
+	sleep(180 * time.Millisecond)
+	// Stopping is safe to retry, but a disconnected controller must not make
+	// diagnostics hang or report a successful pulse when cleanup failed.
+	var stopErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		stopErr = gamepad.Rumble(device, 0, 0)
+		if stopErr == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("stop haptics test on %s: %w", device, stopErr)
 }
 
 func newReadyDesktop(settings config.Settings) (core.Desktop, error) {
