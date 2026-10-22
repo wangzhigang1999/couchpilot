@@ -3,10 +3,37 @@
 package macplatform
 
 import (
+	"fmt"
+	"math"
 	"testing"
 
 	"github.com/wangzhigang1999/couchpilot/internal/core"
 )
+
+func TestNormalizeStickClampsLengthWithoutChangingDirection(t *testing.T) {
+	for _, input := range []struct {
+		name string
+		x, y float64
+	}{
+		{"upper right", 1, 1},
+		{"upper left", -1, 1},
+		{"lower left", -1, -1},
+		{"lower right", 1, -1},
+		{"unequal axes", 1, 0.5},
+	} {
+		for _, deadzone := range []float64{0, 0.18, 0.9} {
+			t.Run(fmt.Sprintf("%s/deadzone=%.2f", input.name, deadzone), func(t *testing.T) {
+				x, y := normalizeStick(input.x, input.y, deadzone)
+				if length := math.Hypot(x, y); math.Abs(length-1) > 1e-12 {
+					t.Errorf("output length=%f, want 1 (x=%f y=%f)", length, x, y)
+				}
+				if math.Abs(x*input.y-y*input.x) > 1e-12 || x*input.x+y*input.y <= 0 {
+					t.Errorf("direction changed: raw=(%f,%f), normalized=(%f,%f)", input.x, input.y, x, y)
+				}
+			})
+		}
+	}
+}
 
 func TestNormalizeStickDeadzoneAndRange(t *testing.T) {
 	x, y := normalizeStick(0.05, 0.05, 0.18)

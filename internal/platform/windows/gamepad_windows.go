@@ -162,10 +162,11 @@ func deviceIndex(device core.DeviceID) (int, error) {
 func normalizeStick(x, y int16, deadzone float64) (float64, float64) {
 	fx := math.Max(-1, float64(x)/32767)
 	fy := math.Max(-1, float64(y)/32767)
-	magnitude := math.Min(1, math.Hypot(fx, fy))
+	magnitude := math.Hypot(fx, fy)
 	if magnitude <= deadzone {
 		return 0, 0
 	}
-	scaled := (magnitude - deadzone) / (1 - deadzone)
+	// Clamp output strength, but use the original length to preserve direction.
+	scaled := (math.Min(1, magnitude) - deadzone) / (1 - deadzone)
 	return fx / magnitude * scaled, fy / magnitude * scaled
 }

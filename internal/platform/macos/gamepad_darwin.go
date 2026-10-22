@@ -134,10 +134,11 @@ func (g *Gamepad) nativeDevice(device core.DeviceID) (gamepadDevice, bool) {
 }
 
 func normalizeStick(x, y, deadzone float64) (float64, float64) {
-	magnitude := math.Min(1, math.Hypot(x, y))
+	magnitude := math.Hypot(x, y)
 	if magnitude <= deadzone {
 		return 0, 0
 	}
-	scaled := (magnitude - deadzone) / (1 - deadzone)
+	// Clamp output strength, but use the original length to preserve direction.
+	scaled := (math.Min(1, magnitude) - deadzone) / (1 - deadzone)
 	return x / magnitude * scaled, y / magnitude * scaled
 }
