@@ -94,17 +94,24 @@ func Load(path string) (settings Settings, err error) {
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
 		return Settings{}, errors.New("decode config: expected a JSON object, got null (use {} for defaults)")
 	}
+	// JSON decoding reuses slice elements. Explicit profiles must not inherit
+	// omitted fields from the default profiles at the same array positions.
+	settings.AppProfiles = nil
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return Settings{}, fmt.Errorf("decode config: %w", err)
 	}
 	// Preserve the legacy opt-out when loading a config written before the
 	// usage report was replaced by the smaller local trace file.
 	var compatibility struct {
-		LocalTraceEnabled      *bool `json:"local_trace_enabled"`
-		LocalUsageStatsEnabled *bool `json:"local_usage_stats_enabled"`
+		LocalTraceEnabled      *bool           `json:"local_trace_enabled"`
+		LocalUsageStatsEnabled *bool           `json:"local_usage_stats_enabled"`
+		AppProfiles            json.RawMessage `json:"app_profiles"`
 	}
 	if err := json.Unmarshal(data, &compatibility); err != nil {
 		return Settings{}, fmt.Errorf("decode config compatibility fields: %w", err)
+	}
+	if len(compatibility.AppProfiles) == 0 {
+		settings.AppProfiles = defaultAppProfiles()
 	}
 	if compatibility.LocalTraceEnabled == nil && compatibility.LocalUsageStatsEnabled != nil {
 		settings.LocalTraceEnabled = *compatibility.LocalUsageStatsEnabled
