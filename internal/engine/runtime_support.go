@@ -178,10 +178,6 @@ func (e *Engine) pulseHaptic(left, right uint16, duration time.Duration) {
 }
 
 func (e *Engine) disconnect() error {
-	if e.smoothScrollActive && e.smoothScroller != nil {
-		_ = e.smoothScroller.ScrollSmooth(0, core.SmoothScrollEnded)
-	}
-	e.smoothScrollActive = false
 	e.smoothScrollVelocity = 0
 	// Fractional input belongs to the old controller session, not its successor.
 	e.scrollRemainder = 0
