@@ -13,11 +13,7 @@ func (e *Engine) dispatchAction(button core.Button, gesture string, action core.
 		return string(core.VoiceTap), e.voicePressed(button)
 	}
 	if down, up, held := heldActionPair(action); held {
-		if err := e.desktop.PerformOperation(down); err != nil {
-			return "", err
-		}
-		e.held.mouse[button] = up
-		return string(action), nil
+		return string(action), e.held.pressMouse(button, down, up, e.desktop.PerformOperation)
 	}
 	var operation core.Operation
 	if strings.HasPrefix(gesture, "lt+") {
