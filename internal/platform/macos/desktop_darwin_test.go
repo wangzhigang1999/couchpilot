@@ -69,6 +69,44 @@ type postedKeyEvent struct {
 	flags uint64
 }
 
+func TestTapHotkeyPreservesAllCleanupErrors(t *testing.T) {
+	for _, stage := range []string{"no dispatch failure", "key down", "key up"} {
+		t.Run(stage, func(t *testing.T) {
+			dispatchErr := errors.New("dispatch failed")
+			shiftErr := errors.New("shift release failed")
+			controlErr := errors.New("control release failed")
+			var releases []uint16
+			err := tapHotkeyWith(func(key uint16, down bool, flags uint64) error {
+				if key == keyTab && (stage == "key down" && down || stage == "key up" && !down) {
+					return dispatchErr
+				}
+				if !down {
+					switch key {
+					case keyShift:
+						releases = append(releases, key)
+						return shiftErr
+					case keyControl:
+						releases = append(releases, key)
+						return controlErr
+					}
+				}
+				return nil
+			}, func(time.Duration) {}, keyControl, keyShift, keyTab)
+			if stage != "no dispatch failure" && !errors.Is(err, dispatchErr) {
+				t.Errorf("dispatch error lost: %v", err)
+			}
+			for _, failure := range []error{shiftErr, controlErr} {
+				if !errors.Is(err, failure) {
+					t.Errorf("cleanup error %v lost: %v", failure, err)
+				}
+			}
+			if !reflect.DeepEqual(releases, []uint16{keyShift, keyControl}) {
+				t.Errorf("cleanup order/attempts changed: %v", releases)
+			}
+		})
+	}
+}
+
 func TestTapHotkeyPressesAndReleasesControl(t *testing.T) {
 	var events []postedKeyEvent
 	err := tapHotkeyWith(func(key uint16, down bool, flags uint64) error {

@@ -392,8 +392,8 @@ func tapHotkeyWith(post keyEventPoster, sleep func(time.Duration), keys ...uint1
 		for index := len(pressed) - 1; index >= 0; index-- {
 			modifier := pressed[index]
 			flags &^= flagForModifier(modifier)
-			if err := post(modifier, false, flags); resultErr == nil && err != nil {
-				resultErr = err
+			if err := post(modifier, false, flags); err != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("release modifier 0x%02X: %w", modifier, err))
 			}
 		}
 	}()
