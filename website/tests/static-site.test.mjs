@@ -118,12 +118,22 @@ test("documents only the minimal privacy-safe local trace", async () => {
   assert.match(english, /foreground executable base name/i);
   assert.match(english, /never includes typed text/i);
   assert.match(english, /stays on the device and is never uploaded/i);
+  assert.match(english, /enabled by default/i);
+  assert.match(english, /relative to the active configuration directory/i);
+  assert.match(english, /quit and restart CouchPilot/i);
+  assert.match(english, /does not delete existing trace data/i);
   assert.match(chinese, /很小的本地 trace/);
   assert.match(chinese, /trace\/trace\.jsonl/i);
   assert.match(chinese, /前台程序的可执行文件名/);
   assert.match(chinese, /不会记录输入文字/);
   assert.match(chinese, /数据只留在本机，绝不会上传/);
+  assert.match(chinese, /默认开启/);
+  assert.match(chinese, /相对于当前使用的配置目录/);
+  assert.match(chinese, /退出并重新启动 CouchPilot/);
+  assert.match(chinese, /不会删除已有的 trace 数据/);
   for (const page of [english, chinese]) {
+    assert.match(page, /local_trace_enabled/);
+    assert.match(page, /<code\b[^>]*>false<\/code>/);
     assert.doesNotMatch(page, /usage-v1-report\.html|couchpilot\.exe usage|local_usage_stats_enabled/i);
     assert.doesNotMatch(page, /open the report|查看按键报告|recommendation dashboard|推荐界面/i);
   }
