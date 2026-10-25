@@ -1,6 +1,7 @@
 package winplatform
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -297,8 +298,8 @@ func tapHotkeyWith(post keyEventPoster, sleep func(time.Duration), keys ...uint1
 	pressed := make([]uint16, 0, len(modifiers))
 	defer func() {
 		for index := len(pressed) - 1; index >= 0; index-- {
-			if err := post(pressed[index], false); resultErr == nil && err != nil {
-				resultErr = err
+			if err := post(pressed[index], false); err != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("release modifier 0x%02X: %w", pressed[index], err))
 			}
 		}
 	}()
