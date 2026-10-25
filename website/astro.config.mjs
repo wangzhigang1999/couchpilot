@@ -12,7 +12,7 @@ export default defineConfig({
         src: "./src/assets/couchpilot-mark.svg",
         alt: "CouchPilot",
       },
-      favicon: "/couchpilot/favicon.svg",
+      favicon: "/favicon.svg",
       social: [
         {
           icon: "github",
