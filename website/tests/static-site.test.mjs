@@ -29,6 +29,17 @@ test("builds English-first bilingual pages for GitHub Pages", async () => {
   await access(new URL("../dist/pagefind/pagefind.js", import.meta.url));
 });
 
+test("links to the published favicon with exactly one GitHub Pages base path", async () => {
+  for (const path of ["index.html", "zh-cn/index.html", "guide/controls/index.html", "zh-cn/guide/controls/index.html"]) {
+    const page = await readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
+    const icon = page.match(/<link\b[^>]*\brel="shortcut icon"[^>]*>/)?.[0];
+    assert.ok(icon, `${path} must declare a favicon`);
+    const href = icon.match(/\bhref="([^"]+)"/)?.[1];
+    assert.equal(href, "/couchpilot/favicon.svg", `${path} must not duplicate or omit the base path`);
+  }
+  await access(new URL("../dist/favicon.svg", import.meta.url));
+});
+
 test("publishes only Codex and browser profiles in both languages", async () => {
   const [englishFiles, chineseFiles] = await Promise.all([
     readdir(new URL("../src/content/docs/apps/", import.meta.url)),
