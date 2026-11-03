@@ -31,6 +31,20 @@ func TestExecuteSubcommandHelpSucceedsWithoutCreatingRuntimeFiles(t *testing.T) 
 	}
 }
 
+func TestInternalLaunchFlagsAreRunOnly(t *testing.T) {
+	for _, command := range []string{"start", "stop", "status", "doctor", "inspect", "profile", "actions"} {
+		for _, arg := range []string{"--pid-file=other.pid", "--stop-file=other.stop", "--app-launch"} {
+			if _, err := parseOptions(command, []string{arg}); err == nil {
+				t.Errorf("%s accepted unused option %s", command, arg)
+			}
+		}
+	}
+	opts, err := parseOptions("run", []string{"--pid-file=other.pid", "--stop-file=other.stop", "--app-launch"})
+	if err != nil || opts.pidFile != "other.pid" || opts.stopFile != "other.stop" || !opts.appLaunch {
+		t.Fatalf("run lost internal launch options: %+v, err=%v", opts, err)
+	}
+}
+
 func TestExecuteStillRejectsInvalidOptions(t *testing.T) {
 	for _, args := range [][]string{
 		{"status", "--unknown-option"},
