@@ -182,9 +182,11 @@ func parseOptions(command string, args []string) (options, error) {
 	// Listing actions is config-independent and accepts no runtime options.
 	if command != "actions" {
 		set.StringVar(&result.configPath, "config", "config.json", "configuration file")
+		set.BoolVar(&result.verbose, "verbose", false, "log input actions")
+	}
+	if command == "run" {
 		set.StringVar(&result.pidFile, "pid-file", "", "internal background process pid file")
 		set.StringVar(&result.stopFile, "stop-file", "", "internal background process stop file")
-		set.BoolVar(&result.verbose, "verbose", false, "log input actions")
 		set.BoolVar(&result.appLaunch, "app-launch", false, "internal application-bundle launch mode")
 	}
 	if err := set.Parse(args); err != nil {
