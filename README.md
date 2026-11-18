@@ -52,6 +52,41 @@ Stop the background process cleanly:
 
 Holding **Back + Start** for 1.5 seconds is still the emergency exit.
 
+### Choosing a controller
+
+By default, CouchPilot accepts any connected controller supported by the
+platform adapter. The current controller keeps priority while it has input;
+when it is idle, input from another controller can take over. To restore this
+automatic selection, set these two fields in your existing `config.json`
+(keep your other settings):
+
+```json
+{
+  "device_id": "",
+  "controller_index": -1
+}
+```
+
+To restrict input to one controller, run `doctor --config <path-to-config.json>`
+using the executable shown above (or the app-bundle executable on macOS).
+Its `controllers: [...]` line lists the currently available device IDs.
+`doctor` also tests vibration on supported controllers; it is not just a
+device-list command.
+
+- Set `device_id` to an exact ID from that list. A nonempty ID takes priority
+  over `controller_index`.
+- Alternatively, leave `device_id` empty and set `controller_index` to a
+  zero-based position in the list: `0` means the first listed controller,
+  `1` the second. This is not the number inside a device ID: for a list
+  containing only `xinput:2`, the controller index is `0`.
+
+With an explicit selection, other controllers cannot take over. If the
+selected ID or index is absent, the engine waits for a matching controller;
+it does not silently fall back. Device IDs and list positions are not
+permanent hardware identities, so recheck them after connection changes.
+Save the configuration actually used by CouchPilot and restart it to apply
+changes; when using `--config`, use the same path for `stop` and `start`.
+
 ## Local diagnostic trace
 
 CouchPilot can append a small diagnostic fact for each physical activation or
